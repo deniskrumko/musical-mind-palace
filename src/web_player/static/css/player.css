@@ -1,0 +1,54 @@
+:root { color-scheme: dark; font-family: system-ui, sans-serif; background: #10141b; color: #edf2f7; }
+* { box-sizing: border-box; }
+body { margin: 0; }
+main { max-width: 1200px; margin: auto; padding: 40px 24px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; align-items: start; }
+header { grid-column: 1 / -1; }
+.eyebrow { font-size: 11px; letter-spacing: .16em; color: #9dafc5; }
+h1 { font-size: clamp(24px, 5vw, 36px); letter-spacing: -.04em; }
+h2 { font-size: 21px; overflow-wrap: anywhere; }
+.player, .playlist { border: 1px solid #303a4a; border-radius: 24px; padding: 32px; background: #191f2a; }
+.player { text-align: center; }
+.art { display: grid; place-items: center; width: 130px; height: 130px; margin: 0 auto 28px; border-radius: 28px; background: linear-gradient(140deg, #294859, #626094); font-size: 65px; color: #c7eadb; }
+.muted { color: #9dafc5; font-size: 14px; overflow-wrap: anywhere; }
+#name { margin: 10px 0 28px; }
+input[type=range] { width: 100%; accent-color: #a6e3c4; cursor: pointer; }
+.times { display: flex; justify-content: space-between; color: #9dafc5; font-size: 13px; font-variant-numeric: tabular-nums; }
+button { font: inherit; border: 1px solid #3a465a; border-radius: 12px; background: #252e3d; color: inherit; cursor: pointer; min-height: 46px; padding: 10px 16px; touch-action: manipulation; }
+button:hover:enabled { background: #364359; }
+button:disabled { opacity: .4; cursor: default; }
+button:focus-visible, input:focus-visible { outline: 3px solid #a6e3c4; outline-offset: 4px; }
+.controls { display: flex; justify-content: center; align-items: center; gap: 20px; margin: 25px 0; }
+.controls button { font-size: 23px; }
+.controls .primary { background: #a6e3c4; color: #101c17; width: 70px; height: 70px; border-radius: 50%; }
+.controls .primary:hover:enabled { background: #c5f4dd; }
+.actions { display: flex; justify-content: center; gap: 12px; flex-wrap: wrap; }
+#status { color: #f4cc91; min-height: 1.5em; font-size: 14px; }
+#count { margin-bottom: 0; }
+.playlist { position: sticky; top: 24px; margin: 0; padding: 0; width: 100%; max-width: none; max-height: calc(100dvh - 48px); color: inherit; overflow-y: auto; overscroll-behavior: contain; }
+.playlist-content { padding: 24px; }
+.playlist-header { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+#toggle-playlist, #close-playlist { display: none; }
+.playlist h2 { font-size: 16px; color: #a6e3c4; }
+ol { padding-left: 24px; }
+li { padding: 9px 0; overflow-wrap: anywhere; }
+#playlist-tracks { list-style: none; padding: 0; margin: 0; }
+#playlist-tracks li { padding: 3px 0; }
+.playlist-track { width: 100%; text-align: left; border: 0; background: transparent; padding: 10px; min-height: 44px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.track-name, .track-directory { display: block; overflow: hidden; text-overflow: ellipsis; }
+.track-directory { margin-top: 4px; font-size: 12px; color: #8996a8; font-weight: 400; }
+#playlist-status { color: #9dafc5; font-size: 13px; }
+.playlist-track[aria-current=true] { color: #a6e3c4; background: #252e3d; }
+.empty { color: #9dafc5; list-style: none; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+[hidden] { display: none !important; }
+body:has(#playlist:modal) { overflow: hidden; }
+@media (max-width: 767px) {
+  main { display: block; max-width: 620px; }
+  header { margin-bottom: 30px; }
+  #toggle-playlist, #close-playlist { display: inline-block; }
+  .playlist { position: fixed; inset: auto 0 0; width: 100%; max-height: 90dvh; margin: 0; padding: 0; border-radius: 24px 24px 0 0; border-bottom: 0; }
+  .playlist-content { padding: 20px 20px max(24px, env(safe-area-inset-bottom)); }
+  .playlist::backdrop { background: rgb(0 0 0 / 70%); }
+  .playlist-header { position: sticky; top: -20px; background: #191f2a; padding: 8px 0; z-index: 1; }
+}
+@media (max-width: 480px) { main { padding: 24px 14px; } .player { padding: 24px 18px; border-radius: 18px; } .art { width: 110px; height: 110px; } }

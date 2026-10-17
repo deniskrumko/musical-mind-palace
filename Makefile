@@ -1,4 +1,4 @@
-.PHONY: fmt lint tests coverage
+.PHONY: fmt lint tests coverage local_webplayer webplayer
 
 # Запуск форматтеров
 fmt:
@@ -38,3 +38,11 @@ coverage:
 import:
 	@PYTHONPATH=src uv run src/scripts/crawler.py
 	@PYTHONPATH=src uv run src/scripts/tidy_up_index.py
+
+# Плеер на всех сетевых интерфейсах
+local_webplayer:
+	@PYTHONPATH=src uv run src/scripts/run_web_player.py --host 0.0.0.0
+
+# Плеер на IPv4 активного сетевого интерфейса
+webplayer:
+	@PYTHONPATH=src uv run src/scripts/run_web_player.py --auto-host

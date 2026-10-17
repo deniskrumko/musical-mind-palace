@@ -26,6 +26,11 @@ class MusicDir(BaseModel):
         )
 
     @property
+    def all_music_files(self) -> list[Path]:
+        """Возвращает музыкальные записи."""
+        return self.dict_files + self.bounce_files
+
+    @property
     def dict_files(self) -> list[Path]:
         """Возвращает диктофонные записи из подпапки dict."""
         return self._category_files("dict")

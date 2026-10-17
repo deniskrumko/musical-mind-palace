@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Музыкальные чертоги</title>
+  <link rel="stylesheet" href="{{ url_for('static', path='/css/player.css') }}">
+  <script defer src="{{ url_for('static', path='/js/player.js') }}"></script>
+</head>
+<body>
+  <main>
+    <header><span class="eyebrow">ЛИЧНАЯ МУЗЫКАЛЬНАЯ БИБЛИОТЕКА</span><h1>Музыкальные чертоги</h1></header>
+    <section class="player" aria-label="Плеер">
+      <div class="art" aria-hidden="true">♫</div>
+      <p id="directory" class="muted">Загрузка библиотеки…</p>
+      <h2 id="name">Подождите</h2>
+      <audio id="audio" preload="metadata"></audio>
+      <label class="sr-only" for="seek">Позиция воспроизведения</label>
+      <input id="seek" type="range" min="0" max="0" value="0" step="0.1" disabled>
+      <div class="times"><span id="elapsed">0:00</span><span id="duration">—:—</span></div>
+      <div class="controls">
+        <button id="previous" aria-label="Предыдущий трек" disabled>⏮</button>
+        <button id="play" class="primary" aria-label="Воспроизвести" disabled>▶</button>
+        <button id="next" aria-label="Следующий трек" disabled>⏭</button>
+      </div>
+      <div class="actions">
+        <button id="next-directory" disabled>Следующая директория →</button>
+        <button id="shuffle" disabled>⇄ Перемешать</button>
+        <button id="toggle-playlist" aria-expanded="false" aria-controls="playlist">☷ Список</button>
+      </div>
+      <p id="status" role="status" aria-live="polite"></p>
+      <p id="count" class="muted"></p>
+    </section>
+    <dialog id="playlist" class="playlist" aria-labelledby="playlist-title" open>
+      <div class="playlist-content">
+      <div class="playlist-header">
+        <h2 id="playlist-title">Очередь</h2>
+        <button id="close-playlist" aria-label="Закрыть плейлист">Закрыть</button>
+      </div>
+      <ul id="playlist-tracks" aria-label="Треки"></ul>
+      <p id="playlist-status" role="status"></p>
+      <button id="playlist-more" hidden>Загрузить ещё</button>
+      </div>
+    </dialog>
+  </main>
+</body>
+</html>
