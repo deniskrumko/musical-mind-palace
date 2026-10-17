@@ -118,6 +118,67 @@ def test_empty_library_and_page(tmp_path):
         assert client.post("/api/next").json()["ended"] is True
 
 
+def test_reveal_track_in_finder(tmp_path: Path) -> None:
+    """Выделяет выбранный файл в Finder без изменения очереди и воспроизведения."""
+    folder = make_song(tmp_path, "Песня с пробелами", ("bounce/трек.mp3", "bounce/ещё.mp3"))
+    with (
+        TestClient(create_app(tmp_path)) as client,
+        patch("web_player.app.sys.platform", "darwin"),
+        patch("web_player.app.subprocess.run") as run,
+    ):
+        track = client.get("/api/state").json()["current"]
+        state = client.post("/api/next").json()
+        response = client.post(f"/api/reveal/{track['id']}")
+        assert response.status_code == 204
+        assert response.content == b""
+        run.assert_called_once_with(
+            ["/usr/bin/open", "-R", str(folder / "bounce" / track["name"])], check=True, timeout=5
+        )
+        assert client.get("/api/state").json() == state
+
+
+def test_reveal_rejects_unavailable_files(tmp_path: Path) -> None:
+    """Отклоняет неизвестные, удалённые и подменённые файлы без запуска Finder."""
+    folder = make_song(tmp_path / "library", "Песня", ("bounce/трек.mp3",))
+    with (
+        TestClient(create_app(tmp_path / "library")) as client,
+        patch("web_player.app.sys.platform", "darwin"),
+        patch("web_player.app.subprocess.run") as run,
+    ):
+        track = client.get("/api/state").json()["current"]
+        url = f"/api/reveal/{track['id']}"
+        assert client.post("/api/reveal/unknown").status_code == 404
+        path = folder / "bounce/трек.mp3"
+        path.unlink()
+        assert client.post(url).status_code == 404
+        outside = tmp_path / "outside.mp3"
+        outside.write_bytes(b"audio")
+        path.symlink_to(outside)
+        assert client.post(url).status_code == 404
+        run.assert_not_called()
+
+
+def test_reveal_platform_and_launch_errors(tmp_path: Path) -> None:
+    """Сообщает об отсутствии macOS и ошибках запуска Finder."""
+    make_song(tmp_path, "Песня", ("bounce/трек.mp3",))
+    with TestClient(create_app(tmp_path)) as client, patch("web_player.app.subprocess.run") as run:
+        track = client.get("/api/state").json()["current"]
+        url = f"/api/reveal/{track['id']}"
+        with patch("web_player.app.sys.platform", "linux"):
+            assert client.post(url).status_code == 501
+        run.assert_not_called()
+        with patch("web_player.app.sys.platform", "darwin"):
+            for error in (
+                OSError(),
+                subprocess.CalledProcessError(1, "open"),
+                subprocess.TimeoutExpired("open", 5),
+            ):
+                run.side_effect = error
+                response = client.post(url)
+                assert response.status_code == 500
+                assert response.json()["detail"] == "Не удалось открыть файл в Finder"
+
+
 def test_network_address():
     """Определяет IPv4 только для интерфейса маршрута по умолчанию."""
     from subprocess import CompletedProcess

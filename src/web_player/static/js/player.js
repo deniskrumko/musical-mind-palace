@@ -8,6 +8,7 @@
   let state = null;
   let loadedId = null;
   let busy = false;
+  let openingFile = false;
   let resumeAt = 0;
   let savedSecond = -1;
 
@@ -149,6 +150,7 @@
       ? `Всего директорий: ${state.total_directories} · Музыкальных файлов: ${state.total}`
       : "";
     element("play").disabled = busy || !track;
+    element("open-file").disabled = busy || !track || openingFile;
     element("previous").disabled = busy || !state?.has_previous;
     element("next").disabled = busy || !state?.has_next;
     element("shuffle").disabled = busy || !state?.has_next;
@@ -267,6 +269,27 @@
     }
   }
 
+  /** Показывает загруженный в браузере файл в Finder на компьютере сервера. */
+  async function openFile() {
+    if (busy || openingFile || !loadedId) return;
+    openingFile = true;
+    render();
+    try {
+      const response = await fetch(`/api/reveal/${encodeURIComponent(loadedId)}`, { method: "POST" });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || "Не удалось открыть файл в Finder");
+      }
+      element("status").textContent = "Файл показан в Finder.";
+    } catch (error) {
+      element("status").textContent = error.message;
+    } finally {
+      openingFile = false;
+      render();
+    }
+  }
+
+  element("open-file").addEventListener("click", () => void openFile());
   element("play").addEventListener("click", () => {
     element("status").textContent = "";
     if (audio.paused) void play();

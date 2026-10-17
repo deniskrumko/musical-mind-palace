@@ -1,11 +1,13 @@
 """HTTP-интерфейс музыкального плеера и потоковая выдача аудио."""
 
+import subprocess
+import sys
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query, Request
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -73,15 +75,31 @@ def create_app(index_dir: Path) -> FastAPI:
         except ValueError as error:
             raise HTTPException(404, str(error))
 
-    @app.get("/audio/{track_id}")
-    async def audio(track_id: str) -> FileResponse:
-        """Отдаёт известный аудиофайл с поддержкой диапазонов для перемотки."""
+    def audio_path(track_id: str) -> Path:
+        """Проверяет существование аудиофайла и его принадлежность библиотеке."""
         track = app.state.queue.tracks.get(track_id)
         if track is None or not is_file(track.path):
             raise HTTPException(404, "Музыкальный файл не найден")
         resolved = track.path.resolve()
         if not resolved.is_relative_to(root):
             raise HTTPException(404, "Музыкальный файл недоступен")
-        return FileResponse(resolved, content_disposition_type="inline")
+        return resolved
+
+    @app.post("/api/reveal/{track_id}", status_code=204)
+    def reveal_track(track_id: str) -> Response:
+        """Открывает Finder на компьютере сервера и выделяет указанный аудиофайл."""
+        path = audio_path(track_id)
+        if sys.platform != "darwin":
+            raise HTTPException(501, "Открытие в Finder доступно только на macOS")
+        try:
+            subprocess.run(["/usr/bin/open", "-R", str(path)], check=True, timeout=5)
+        except (OSError, subprocess.SubprocessError) as error:
+            raise HTTPException(500, "Не удалось открыть файл в Finder") from error
+        return Response(status_code=204)
+
+    @app.get("/audio/{track_id}")
+    async def audio(track_id: str) -> FileResponse:
+        """Отдаёт известный аудиофайл с поддержкой диапазонов для перемотки."""
+        return FileResponse(audio_path(track_id), content_disposition_type="inline")
 
     return app

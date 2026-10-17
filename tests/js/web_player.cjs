@@ -145,6 +145,13 @@ async function main() {
   assert.equal(get("count").textContent, "Всего директорий: 3 · Музыкальных файлов: 5");
   assert.equal(media.metadata.artist, "А");
   assert.equal(media.playbackState, "paused");
+  assert.equal(get("open-file").disabled, false);
+  get("open-file").emit("click");
+  await settle();
+  assert.deepEqual(calls.at(-1), ["/api/reveal/a1", "POST"]);
+  assert.equal(audio.src, "/audio/a1");
+  assert.equal(audio.paused, true);
+  assert.equal(get("status").textContent, "Файл показан в Finder.");
   assert.equal(handlers.seekbackward, null);
   assert.equal(handlers.seekforward, null);
   assert.equal(get("next-directory").hidden, false);
@@ -163,6 +170,10 @@ async function main() {
   assert.equal(audio.src, "/audio/a2");
   assert.equal(audio.paused, false);
   assert.equal(list.children[0], firstRow);
+  get("open-file").emit("click");
+  await settle();
+  assert.deepEqual(calls.at(-1), ["/api/reveal/a2", "POST"]);
+  assert.equal(audio.paused, false);
   assert.equal(list.children[1].children[0]["aria-current"], "true");
   assert.equal(firstRow.children[0]["aria-current"], undefined);
   assert.ok(get("playlist").scrollCalls > 0);

@@ -43,6 +43,7 @@ li { padding: 9px 0; overflow-wrap: anywhere; }
 [hidden] { display: none !important; }
 body:has(#playlist:modal) { overflow: hidden; }
 @media (max-width: 767px) {
+  #open-file { display: none; }
   main { display: block; max-width: 620px; }
   header { margin-bottom: 30px; }
   #toggle-playlist, #close-playlist { display: inline-block; }
