@@ -27,6 +27,8 @@ INPUT_MUSIC_DIRS: list[Path] = [
     ROOT_MUSIC_DIR / "Piano",
     ROOT_MUSIC_DIR / "Polystra",
     ROOT_MUSIC_DIR / "Todo",
+    ROOT_MUSIC_DIR / "Trash",
+    ROOT_MUSIC_DIR / "TO IMPORT",
 ]
 
 

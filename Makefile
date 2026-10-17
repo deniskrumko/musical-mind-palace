@@ -33,3 +33,8 @@ ff:
 # Запуск тестов с coverage
 coverage:
 	@uv run pytest --cov --cov-report=term-missing
+
+# Обработка папки импорта
+import:
+	@PYTHONPATH=src uv run src/scripts/crawler.py
+	@PYTHONPATH=src uv run src/scripts/tidy_up_index.py

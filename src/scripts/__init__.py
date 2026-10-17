@@ -2,6 +2,6 @@
 
 from pathlib import Path
 
-ROOT_MUSIC_DIR = Path("/Users/deniskrumko/Yandex.Disk.localized/Музыка")
+ROOT_MUSIC_DIR = Path("/Users/deniskrumko/Music")
 
-INDEX_DIR = ROOT_MUSIC_DIR / "Index"
+INDEX_DIR = ROOT_MUSIC_DIR / "INDEX"
