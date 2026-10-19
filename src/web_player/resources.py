@@ -25,6 +25,7 @@ class QueueView(BaseModel):
     total_directories: int
     has_previous: bool
     has_next: bool
+    has_previous_directory: bool
     has_next_directory: bool
     shuffled: bool
     ended: bool
@@ -74,6 +75,30 @@ class PlayerQueue(BaseModel):
             None,
         )
 
+    def _previous_directory_index(self) -> int | None:
+        """Находит первый трек ближайшей предыдущей директории в обычном режиме."""
+        if self.shuffled or self.current_id is None:
+            return None
+        current_index = self.order.index(self.current_id)
+        current_directory = self.tracks[self.current_id].directory
+        previous_directory = next(
+            (
+                self.tracks[key].directory
+                for key in reversed(self.order[:current_index])
+                if self.tracks[key].directory != current_directory
+            ),
+            None,
+        )
+        if previous_directory is None:
+            return None
+        return self.order.index(
+            next(
+                key
+                for key in self.order[:current_index]
+                if self.tracks[key].directory == previous_directory
+            )
+        )
+
     def view(self) -> QueueView:
         """Возвращает текущий трек, историю и положение в едином плейлисте."""
         return QueueView(
@@ -84,6 +109,7 @@ class PlayerQueue(BaseModel):
             total_directories=self.total_directories,
             has_previous=bool(self.history),
             has_next=bool(self.remaining),
+            has_previous_directory=self._previous_directory_index() is not None,
             has_next_directory=self._next_directory_index() is not None,
             shuffled=self.shuffled,
             ended=self.ended,
@@ -129,6 +155,13 @@ class PlayerQueue(BaseModel):
         if index is not None:
             del self.remaining[:index]
             return self.next()
+        return self.view()
+
+    def previous_directory(self) -> QueueView:
+        """Возвращает очередь к первому файлу ближайшей предыдущей директории."""
+        index = self._previous_directory_index()
+        if index is not None:
+            return self.select(self.order[index])
         return self.view()
 
     def select(self, track_id: str) -> QueueView:

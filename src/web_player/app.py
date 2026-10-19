@@ -67,6 +67,11 @@ def create_app(index_dir: Path) -> FastAPI:
         """Переводит очередь к первому файлу следующей музыкальной директории."""
         return app.state.queue.next_directory()
 
+    @app.post("/api/previous-directory")
+    async def previous_directory() -> QueueView:
+        """Переводит очередь к первому файлу предыдущей музыкальной директории."""
+        return app.state.queue.previous_directory()
+
     @app.post("/api/select/{track_id}")
     async def select_track(track_id: str) -> QueueView:
         """Выбирает указанный трек из очереди или истории прослушивания."""

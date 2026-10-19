@@ -69,14 +69,15 @@ async function page(withMedia = true, unsupportedActions = false, trackCount = 5
   const [a1, a2, b1, b2, c1] = tracks;
   const initial = { current: tracks[currentIndex], previous: tracks.slice(0, currentIndex), upcoming: tracks.slice(currentIndex + 1), total: trackCount, total_directories: 3,
     current_index: currentIndex, playlist_total: trackCount, playlist_revision: 0,
-    has_previous: false, has_next: true, has_next_directory: true, shuffled: false, ended: false };
+    has_previous: false, has_next: true, has_previous_directory: currentIndex > 0, has_next_directory: true, shuffled: false, ended: false };
   const replies = {
     state: initial,
     next: { ...initial, current_index: 1, current: a2, previous: [a1], upcoming: [b1, b2, c1], has_previous: true },
     previous: initial,
     a2: { ...initial, current_index: 1, current: a2, previous: [a1], upcoming: [b1, b2, c1], has_previous: true },
     "next-directory": { ...initial, current_index: 2, current: b1, previous: [a1], upcoming: [b2, c1], has_previous: true },
-    shuffle: { ...initial, playlist_revision: 1, current_index: 2, current: b1, previous: [a1], upcoming: [a2, b2, a1],
+    "previous-directory": initial,
+    shuffle: { ...initial, playlist_revision: 1, current_index: 0, current: a1, previous: [], upcoming: [a2, b2, b1],
       has_previous: true, shuffled: true, has_next_directory: false },
   };
   const elements = new Map();
@@ -205,12 +206,16 @@ async function main() {
   assert.deepEqual(calls.at(-1), ["/api/next-directory", "POST"]);
   assert.equal(audio.src, "/audio/b1");
   assert.equal(audio.paused, true);
+  get("previous-directory").emit("click");
+  await settle();
+  assert.deepEqual(calls.at(-1), ["/api/previous-directory", "POST"]);
+  assert.equal(audio.src, "/audio/a1");
   handlers.play();
   await settle();
   get("shuffle").emit("click");
   await settle();
   assert.equal(get("next-directory").hidden, true);
-  assert.equal(audio.src, "/audio/b1");
+  assert.equal(audio.src, "/audio/a1");
   assert.equal(audio.paused, false);
   assert.equal(get("playlist-tracks").children.length, 5);
   assert.equal(typeof handlers.nexttrack, "function");

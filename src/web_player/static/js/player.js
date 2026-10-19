@@ -154,6 +154,8 @@
     element("previous").disabled = busy || !state?.has_previous;
     element("next").disabled = busy || !state?.has_next;
     element("shuffle").disabled = busy || !state?.has_next;
+    element("previous-directory").hidden = Boolean(state?.shuffled);
+    element("previous-directory").disabled = busy || !state?.has_previous_directory;
     element("next-directory").hidden = Boolean(state?.shuffled);
     element("next-directory").disabled = busy || !state?.has_next_directory;
     highlightPlaylist();
@@ -297,6 +299,7 @@
   });
   element("previous").addEventListener("click", () => void change("previous"));
   element("next").addEventListener("click", () => void change("next"));
+  element("previous-directory").addEventListener("click", () => void change("previous-directory"));
   element("next-directory").addEventListener("click", () => void change("next-directory"));
   element("shuffle").addEventListener("click", () => void change("shuffle"));
   const playlist = element("playlist");

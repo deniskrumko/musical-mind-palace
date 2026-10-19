@@ -3,13 +3,12 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Музыкальные чертоги</title>
+  <title>Музыкальный плеер</title>
   <link rel="stylesheet" href="{{ url_for('static', path='/css/player.css') }}">
   <script defer src="{{ url_for('static', path='/js/player.js') }}"></script>
 </head>
 <body>
   <main>
-    <header><span class="eyebrow">ЛИЧНАЯ МУЗЫКАЛЬНАЯ БИБЛИОТЕКА</span><h1>Музыкальные чертоги</h1></header>
     <section class="player" aria-label="Плеер">
       <div class="art" aria-hidden="true">♫</div>
       <p id="directory" class="muted">Загрузка библиотеки…</p>
@@ -22,10 +21,11 @@
         <button id="previous" aria-label="Предыдущий трек" disabled>⏮</button>
         <button id="play" class="primary" aria-label="Воспроизвести" disabled>▶</button>
         <button id="next" aria-label="Следующий трек" disabled>⏭</button>
+        <button id="previous-directory" class="directory-button" aria-label="Предыдущая директория" title="Предыдущая директория" disabled>↶</button>
+        <button id="next-directory" class="directory-button" aria-label="Следующая директория" title="Следующая директория" disabled>↷</button>
       </div>
       <div class="actions">
         <button id="open-file" title="Показать текущий файл в Finder" disabled>Открыть</button>
-        <button id="next-directory" disabled>Следующая директория →</button>
         <button id="shuffle" disabled>⇄ Перемешать</button>
         <button id="toggle-playlist" aria-expanded="false" aria-controls="playlist">☷ Список</button>
       </div>

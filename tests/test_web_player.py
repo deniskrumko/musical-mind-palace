@@ -106,7 +106,7 @@ def test_empty_library_and_page(tmp_path):
     with TestClient(create_app(tmp_path)) as client:
         response = client.get("/")
         assert response.status_code == 200
-        assert "Музыкальные чертоги" in response.text
+        assert "Музыкальный плеер" in response.text
         assert client.get("/static/js/player.js").status_code == 200
         assert client.get("/static/css/player.css").status_code == 200
         view = client.get("/api/state").json()
@@ -199,12 +199,18 @@ def test_next_directory_skips_files_and_preserves_history(tmp_path):
     with TestClient(create_app(tmp_path)) as client:
         first = client.get("/api/state").json()
         assert first["has_next_directory"] is True
+        assert first["has_previous_directory"] is False
         jumped = client.post("/api/next-directory").json()
         assert jumped["current"]["directory"] == "Б"
         assert jumped["current"]["name"] == "4.m4a"
         assert jumped["previous"] == [first["current"]]
         assert [track["name"] for track in jumped["upcoming"]] == ["5.mp3"]
         assert jumped["has_next_directory"] is False
+        assert jumped["has_previous_directory"] is True
+        back_directory = client.post("/api/previous-directory").json()
+        assert back_directory["current"] == first["current"]
+        assert [track["name"] for track in back_directory["upcoming"]] == ["4.m4a", "5.mp3"]
+        jumped = client.post("/api/next-directory").json()
         assert client.post("/api/next-directory").json() == jumped
         back = client.post("/api/previous").json()
         assert back["current"] == first["current"]
