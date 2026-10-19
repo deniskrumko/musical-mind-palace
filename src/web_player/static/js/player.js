@@ -19,6 +19,15 @@
     return `${Math.floor(value / 60)}:${String(value % 60).padStart(2, "0")}`;
   }
 
+  /** Обновляет цветную часть полосы перемотки. */
+  function updateSeekProgress() {
+    const seek = element("seek");
+    const duration = Number(seek.max);
+    const position = Number(seek.value);
+    const progress = duration > 0 ? Math.max(0, Math.min(100, position / duration * 100)) : 0;
+    seek.style?.setProperty?.("--seek-progress", `${progress}%`);
+  }
+
   /** Сохраняет позицию текущего трека в браузере. */
   function save() {
     if (!loadedId || audio.readyState === 0) return;
@@ -50,17 +59,19 @@
   let playlistRevision = null;
   let playlistTask = null;
   let playlistGeneration = 0;
+  let playlistInitialScrollPending = true;
 
   /** Прокручивает только панель плейлиста к текущей песне. */
   function scrollToCurrent() {
     const button = playlistButtons.get(state?.current?.id);
-    if (!button || !playlist.open) return;
+    if (!button || playlist.getAttribute("aria-hidden") === "true") return false;
     const panel = playlist.getBoundingClientRect();
     const row = button.getBoundingClientRect();
     playlist.scrollTo({
       top: playlist.scrollTop + row.top - panel.top - playlist.clientHeight / 2 + row.height / 2,
       behavior: "auto",
     });
+    return true;
   }
 
   /** Обновляет подсветку без пересоздания уже загруженных строк. */
@@ -86,7 +97,7 @@
         const page = await response.json();
         if (generation !== playlistGeneration) return false;
         if (page.revision !== state.playlist_revision) {
-          throw new Error("Очередь изменилась. Обновите страницу.");
+          throw new Error("Состав плейлиста изменился. Обновите страницу.");
         }
         for (const track of page.tracks) {
           const item = document.createElement("li");
@@ -99,7 +110,7 @@
           directory.className = "track-directory";
           directory.textContent = track.directory;
           button.append(filename, directory);
-          button.addEventListener("click", () => void change(`select/${encodeURIComponent(track.id)}`, true));
+          button.addEventListener("click", () => void change(`select/${encodeURIComponent(track.id)}`, true, false));
           item.append(button);
           element("playlist-tracks").append(item);
           playlistButtons.set(track.id, button);
@@ -122,7 +133,7 @@
   }
 
   /** Догружает ленту до текущего файла, сохраняя все предыдущие строки. */
-  async function syncPlaylist() {
+  async function syncPlaylist(scrollCurrent = true) {
     if (playlistRevision !== state.playlist_revision) {
       playlistGeneration += 1;
       playlistTask = null;
@@ -137,7 +148,7 @@
     }
     if (!state.playlist_total) element("playlist-status").textContent = "Нет треков";
     highlightPlaylist();
-    scrollToCurrent();
+    if (scrollCurrent && scrollToCurrent()) playlistInitialScrollPending = false;
   }
 
   /** Обновляет сведения о треке, кнопки и окно очереди. */
@@ -213,8 +224,8 @@
     const handlers = {
       play: () => { if (!busy && state?.current) void play(); },
       pause: () => audio.pause(),
-      previoustrack: () => { if (state?.has_previous) void change("previous"); },
-      nexttrack: () => { if (state?.has_next) void change("next"); },
+      previoustrack: () => { if (state?.has_previous) void change("previous", !audio.paused, false); },
+      nexttrack: () => { if (state?.has_next) void change("next", !audio.paused, false); },
       seekbackward: null,
       seekforward: null,
       seekto: (event) => {
@@ -241,6 +252,7 @@
     savedSecond = -1;
     element("seek").disabled = true;
     element("seek").value = 0;
+    updateSeekProgress();
     element("elapsed").textContent = "0:00";
     element("duration").textContent = "—:—";
     audio.src = `/audio/${loadedId}`;
@@ -261,7 +273,7 @@
   }
 
   /** Выполняет переход или перемешивание и применяет состояние сервера. */
-  async function change(action, autoplay = !audio.paused) {
+  async function change(action, autoplay = !audio.paused, scrollPlaylist = true) {
     if (busy) return;
     busy = true;
     render();
@@ -270,13 +282,13 @@
       if (action !== "shuffle") loadCurrent();
       if (state.ended) {
         audio.pause();
-        element("status").textContent = "Очередь закончилась.";
+        element("status").textContent = "Плейлист закончился.";
       } else if (action === "shuffle") {
         element("status").textContent = "Следующие треки перемешаны.";
       } else if (autoplay && state.current) {
         void play();
       }
-      await syncPlaylist();
+      await syncPlaylist(scrollPlaylist);
     } catch (error) {
       element("status").textContent = error.message;
     } finally {
@@ -319,31 +331,30 @@
   const playlist = element("playlist");
   const mobileLayout = window.matchMedia("(max-width: 767px)");
 
+  window.addEventListener("pageshow", () => {
+    const activeElement = document.activeElement;
+    if (activeElement && playlist.contains(activeElement)) activeElement.blur();
+  });
+
   /** Переключает постоянную боковую панель и закрытое мобильное окно. */
   function syncPlaylistLayout() {
-    playlist.close();
-    if (!mobileLayout.matches) {
-      playlist.show();
-      scrollToCurrent();
-    }
+    playlist.classList.remove("is-open");
+    playlist.setAttribute("aria-hidden", String(mobileLayout.matches));
     element("toggle-playlist").setAttribute("aria-expanded", "false");
+    element("toggle-playlist").setAttribute("aria-pressed", "false");
   }
 
   element("toggle-playlist").addEventListener("click", () => {
     if (!mobileLayout.matches) return;
-    playlist.showModal();
-    scrollToCurrent();
-    element("toggle-playlist").setAttribute("aria-expanded", "true");
-  });
-  element("close-playlist").addEventListener("click", () => playlist.close());
-  playlist.addEventListener("click", (event) => {
-    if (mobileLayout.matches && event.target === playlist) playlist.close();
-  });
-  playlist.addEventListener("close", () => {
-    element("toggle-playlist").setAttribute("aria-expanded", "false");
+    const isOpen = playlist.classList.toggle("is-open");
+    playlist.setAttribute("aria-hidden", String(!isOpen));
+    element("toggle-playlist").setAttribute("aria-expanded", String(isOpen));
+    element("toggle-playlist").setAttribute("aria-pressed", String(isOpen));
+    if (isOpen && playlistInitialScrollPending && scrollToCurrent()) playlistInitialScrollPending = false;
   });
   playlist.addEventListener("scroll", () => {
-    if (playlist.open && playlist.scrollHeight - playlist.scrollTop - playlist.clientHeight < 160) {
+    if ((!mobileLayout.matches || playlist.classList.contains("is-open"))
+      && playlist.scrollHeight - playlist.scrollTop - playlist.clientHeight < 160) {
       void loadMoreTracks();
     }
   });
@@ -352,6 +363,7 @@
   syncPlaylistLayout();
   element("seek").addEventListener("input", (event) => {
     if (Number.isFinite(audio.duration)) audio.currentTime = Number(event.target.value);
+    updateSeekProgress();
     save();
   });
   audio.addEventListener("loadedmetadata", () => {
@@ -360,12 +372,14 @@
     element("seek").max = audio.duration;
     element("seek").disabled = false;
     if (resumeAt > 0 && resumeAt < audio.duration) audio.currentTime = resumeAt;
+    updateSeekProgress();
     resumeAt = 0;
     updateMediaPosition();
   });
   audio.addEventListener("timeupdate", () => {
     element("elapsed").textContent = time(audio.currentTime);
     element("seek").value = audio.currentTime;
+    updateSeekProgress();
     if (Math.floor(audio.currentTime) !== savedSecond) {
       save();
       savedSecond = Math.floor(audio.currentTime);
@@ -383,10 +397,10 @@
     save();
     updateMediaSession();
   });
-  audio.addEventListener("ended", () => void change("next", true));
+  audio.addEventListener("ended", () => void change("next", true, false));
   audio.addEventListener("error", () => {
     element("status").textContent = `Не удалось воспроизвести «${state?.current?.name}».`;
-    if (state?.has_next) void change("next", true);
+    if (state?.has_next) void change("next", true, false);
     else {
       audio.pause();
       element("status").textContent += " Доступных следующих треков нет.";

@@ -10,43 +10,43 @@
 <body>
   <main>
     <section class="player" aria-label="Плеер">
-      <p id="directory" class="muted">Загрузка библиотеки…</p>
-      <h2 id="name">Подождите</h2>
       <section id="track-info" class="track-info" aria-label="Информация о музыкальной директории">
         <p id="description" class="track-description" hidden></p>
         <dl id="tags" class="track-tags"></dl>
         <p id="resources" class="track-resources"></p>
       </section>
-      <audio id="audio" preload="metadata"></audio>
-      <label class="sr-only" for="seek">Позиция воспроизведения</label>
-      <input id="seek" type="range" min="0" max="0" value="0" step="0.1" disabled>
-      <div class="times"><span id="elapsed">0:00</span><span id="duration">—:—</span></div>
-      <div class="controls">
-        <button id="previous" aria-label="Предыдущий трек" disabled>⏮</button>
-        <button id="play" class="primary" aria-label="Воспроизвести" disabled>▶</button>
-        <button id="next" aria-label="Следующий трек" disabled>⏭</button>
-        <button id="previous-directory" class="directory-button" aria-label="Предыдущая директория" title="Предыдущая директория" disabled>↶</button>
-        <button id="next-directory" class="directory-button" aria-label="Следующая директория" title="Следующая директория" disabled>↷</button>
-      </div>
-      <div class="actions">
-        <button id="open-file" title="Показать текущий файл в Finder" disabled>Открыть</button>
-        <button id="shuffle" disabled>⇄ Перемешать</button>
-        <button id="toggle-playlist" aria-expanded="false" aria-controls="playlist">☷ Список</button>
-      </div>
       <p id="status" role="status" aria-live="polite"></p>
       <p id="count" class="muted"></p>
     </section>
-    <dialog id="playlist" class="playlist" aria-labelledby="playlist-title" open>
+    <aside id="playlist" class="playlist" aria-label="Список треков">
       <div class="playlist-content">
-      <div class="playlist-header">
-        <h2 id="playlist-title">Очередь</h2>
-        <button id="close-playlist" aria-label="Закрыть плейлист">Закрыть</button>
-      </div>
       <ul id="playlist-tracks" aria-label="Треки"></ul>
       <p id="playlist-status" role="status"></p>
       <button id="playlist-more" hidden>Загрузить ещё</button>
       </div>
-    </dialog>
+    </aside>
   </main>
+  <footer class="control" aria-label="Управление воспроизведением">
+    <label class="sr-only" for="seek">Позиция воспроизведения</label>
+    <input id="seek" class="control-scroll-bar" type="range" min="0" max="0" value="0" step="0.1" disabled>
+    <audio id="audio" preload="metadata"></audio>
+    <div class="control-left-block">
+      <button id="play" class="primary" aria-label="Воспроизвести" disabled>▶</button>
+      <button id="previous" aria-label="Предыдущий трек" disabled>⏮</button>
+      <button id="next" aria-label="Следующий трек" disabled>⏭</button>
+      <button id="previous-directory" class="directory-button" aria-label="Предыдущая директория" title="Предыдущая директория" disabled>↶</button>
+      <button id="next-directory" class="directory-button" aria-label="Следующая директория" title="Следующая директория" disabled>↷</button>
+    </div>
+    <div class="control-time control-time-float"><span id="elapsed">0:00</span><span aria-hidden="true"> / </span><span id="duration">—:—</span></div>
+    <div class="control-title">
+      <h2 id="name">Подождите</h2>
+      <p id="directory" class="muted">Загрузка библиотеки…</p>
+    </div>
+    <div class="control-right-block">
+      <button id="open-file" aria-label="Открыть файл в Finder" title="Показать текущий файл в Finder" disabled><span aria-hidden="true">↗</span><span class="control-action-label">Открыть</span></button>
+      <button id="shuffle" aria-label="Перемешать треки" disabled><span aria-hidden="true">⇄</span><span class="control-action-label">Перемешать</span></button>
+      <button id="toggle-playlist" aria-label="Показать список" aria-expanded="false" aria-pressed="false" aria-controls="playlist"><span aria-hidden="true">☷</span><span class="control-action-label">Список</span></button>
+    </div>
+  </footer>
 </body>
 </html>

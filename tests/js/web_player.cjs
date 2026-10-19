@@ -19,6 +19,20 @@ class Element {
     this.currentTime = 0;
     this.duration = NaN;
     this.playbackRate = 1;
+    this.classes = new Set();
+    this.classList = {
+      add: name => this.classes.add(name),
+      remove: name => this.classes.delete(name),
+      contains: name => this.classes.has(name),
+      toggle: name => {
+        if (this.classes.has(name)) {
+          this.classes.delete(name);
+          return false;
+        }
+        this.classes.add(name);
+        return true;
+      },
+    };
   }
   /** Регистрирует обработчик события. */
   addEventListener(type, handler) { (this.listeners[type] ??= []).push(handler); }
@@ -30,6 +44,8 @@ class Element {
   append(...children) { this.children.push(...children); }
   /** Запоминает атрибут элемента. */
   setAttribute(name, value) { this[name] = value; }
+  /** Возвращает атрибут элемента. */
+  getAttribute(name) { return this[name] ?? null; }
   /** Удаляет атрибут выделения. */
   removeAttribute(name) { delete this[name]; }
   /** Возвращает размеры строки для проверки прокрутки панели. */
@@ -125,22 +141,25 @@ async function page(withMedia = true, unsupportedActions = false, trackCount = 5
 /** Проверяет команды системного плеера, группировку и сохранение паузы. */
 async function main() {
   const { get, handlers, calls, media, layout } = await page();
-  assert.equal(get("playlist").open, true);
-  assert.equal(get("playlist").modal, false);
+  assert.equal(get("playlist")["aria-hidden"], "false");
   layout.matches = true;
   layout.onChange();
-  assert.equal(get("playlist").open, false);
+  assert.equal(get("playlist")["aria-hidden"], "true");
   get("toggle-playlist").emit("click");
-  assert.equal(get("playlist").modal, true);
+  assert.equal(get("playlist").classList.contains("is-open"), true);
+  assert.equal(get("playlist")["aria-hidden"], "false");
   assert.equal(get("toggle-playlist")["aria-expanded"], "true");
-  get("close-playlist").emit("click");
-  assert.equal(get("playlist").open, false);
+  assert.equal(get("toggle-playlist")["aria-pressed"], "true");
+  get("toggle-playlist").emit("click");
+  assert.equal(get("playlist").classList.contains("is-open"), false);
+  assert.equal(get("playlist")["aria-hidden"], "true");
   assert.equal(get("toggle-playlist")["aria-expanded"], "false");
+  assert.equal(get("toggle-playlist")["aria-pressed"], "false");
   get("toggle-playlist").emit("click");
   layout.matches = false;
   layout.onChange();
-  assert.equal(get("playlist").open, true);
-  assert.equal(get("playlist").modal, false);
+  assert.equal(get("playlist")["aria-hidden"], "false");
+  assert.equal(get("playlist").classList.contains("is-open"), false);
   const audio = get("audio");
   assert.equal(media.metadata.title, "1.mp3");
   assert.equal(get("count").textContent, "Всего директорий: 3 · Музыкальных файлов: 5");
