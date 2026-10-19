@@ -5,6 +5,8 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field
 
+from index import Tag
+
 
 class Track(BaseModel):
     """Описывает музыкальный файл и его отображаемые сведения."""
@@ -12,6 +14,11 @@ class Track(BaseModel):
     id: str
     name: str
     directory: str
+    description: str = ""
+    tags: list[Tag] = Field(default_factory=list)
+    music_count: int = 0
+    logic_count: int = 0
+    tab_count: int = 0
     path: Path = Field(exclude=True)
 
 

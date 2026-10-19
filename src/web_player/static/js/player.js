@@ -92,7 +92,6 @@
           const item = document.createElement("li");
           const button = document.createElement("button");
           button.className = "playlist-track";
-          button.title = `${track.directory} / ${track.name}`;
           const filename = document.createElement("span");
           filename.className = "track-name";
           filename.textContent = track.name;
@@ -146,6 +145,21 @@
     const track = state?.current;
     element("name").textContent = track?.name ?? "В библиотеке нет музыки";
     element("directory").textContent = track?.directory ?? "Добавьте записи и перезапустите сервер";
+    const description = element("description");
+    description.textContent = track?.description ?? "";
+    description.hidden = !track?.description;
+    const tags = element("tags");
+    tags.replaceChildren();
+    for (const tag of track?.tags ?? []) {
+      const term = document.createElement("dt");
+      term.textContent = tag.name;
+      const value = document.createElement("dd");
+      value.textContent = Array.isArray(tag.value) ? tag.value.join(", ") : String(tag.value);
+      tags.append(term, value);
+    }
+    element("resources").textContent = track
+      ? `Музыка: ${track.music_count} · LogicX: ${track.logic_count} · Табы: ${track.tab_count}`
+      : "";
     element("count").textContent = state
       ? `Всего директорий: ${state.total_directories} · Музыкальных файлов: ${state.total}`
       : "";

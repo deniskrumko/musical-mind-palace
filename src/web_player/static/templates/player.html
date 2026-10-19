@@ -10,9 +10,13 @@
 <body>
   <main>
     <section class="player" aria-label="Плеер">
-      <div class="art" aria-hidden="true">♫</div>
       <p id="directory" class="muted">Загрузка библиотеки…</p>
       <h2 id="name">Подождите</h2>
+      <section id="track-info" class="track-info" aria-label="Информация о музыкальной директории">
+        <p id="description" class="track-description" hidden></p>
+        <dl id="tags" class="track-tags"></dl>
+        <p id="resources" class="track-resources"></p>
+      </section>
       <audio id="audio" preload="metadata"></audio>
       <label class="sr-only" for="seek">Позиция воспроизведения</label>
       <input id="seek" type="range" min="0" max="0" value="0" step="0.1" disabled>

@@ -8,9 +8,9 @@ from unittest.mock import patch
 import pytest
 from fastapi.testclient import TestClient
 
+from core.utils import local_ip
 from web_player.app import create_app
 from web_player.library import scan_library
-from web_player.network import local_ip
 
 
 def make_song(root: Path, name: str, files: tuple[str, ...]) -> Path:
@@ -180,16 +180,13 @@ def test_reveal_platform_and_launch_errors(tmp_path: Path) -> None:
 
 
 def test_network_address():
-    """Определяет IPv4 только для интерфейса маршрута по умолчанию."""
-    from subprocess import CompletedProcess
-
-    with patch("web_player.network.subprocess.run") as run:
-        run.side_effect = [
-            CompletedProcess([], 0, "  interface: en0\n"),
-            CompletedProcess([], 0, "\tinet6 fe80::123\n\tinet 192.168.1.5 netmask 0xffffff00\n"),
-        ]
+    """Получает IPv4 интерфейса, выбранного системой для UDP-соединения."""
+    with patch("core.utils.socket.socket") as socket_factory:
+        connection = socket_factory.return_value
+        connection.getsockname.return_value = ("192.168.1.5", 12345)
         assert local_ip() == "192.168.1.5"
-        assert run.call_args.args[0] == ["/sbin/ifconfig", "en0"]
+        connection.connect.assert_called_once_with(("8.8.8.8", 80))
+        connection.close.assert_called_once_with()
 
 
 def test_next_directory_skips_files_and_preserves_history(tmp_path):

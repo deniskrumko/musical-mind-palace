@@ -14,13 +14,26 @@ def scan_library(index_dir: Path) -> PlayerQueue:
     tracks: dict[str, Track] = {}
     directories = get_music_dirs(index_dir)
     for folder in directories:
-        for path in MusicDir(path=folder).all_music_files:
+        music_dir = MusicDir.from_path(path=folder)
+        index = music_dir.index
+        description = index.description.strip() if index else ""
+        tags = list(index.tags.values()) if index else []
+        music_files = music_dir.all_music_files
+        music_count = len(music_files)
+        logic_count = len(music_dir.logic_files)
+        tab_count = len(music_dir.tab_files)
+        for path in music_files:
             relative = path.relative_to(index_dir).as_posix()
             track_id = sha256(relative.encode()).hexdigest()
             tracks[track_id] = Track(
                 id=track_id,
                 name=path.name,
                 directory=folder.relative_to(index_dir).as_posix(),
+                description=description,
+                tags=tags,
+                music_count=music_count,
+                logic_count=logic_count,
+                tab_count=tab_count,
                 path=path,
             )
     keys = list(tracks)

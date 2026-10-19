@@ -155,7 +155,7 @@ def crawl(root: Path, inputs: list[Path], output: Path) -> int:
         destination, merge = choose_destination(source, output / clean_name(source.name))
         index_path = source / INDEX_FILENAME
         index = Index.load(index_path)
-        index.set("Original folder", source.relative_to(root).as_posix())
+        index.set("original_folder", source.relative_to(root).as_posix())
         index.save(index_path)
         if merge:
             merge_directories(source, destination)

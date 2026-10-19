@@ -1,18 +1,31 @@
 """Представление содержимого музыкальной директории."""
 
+from __future__ import annotations
+
 from pathlib import Path
 
 from pydantic import BaseModel
 
 from core.file_extensions import CATEGORY_EXTENSIONS
 from core.logicx import is_directory, is_file
-from index import INDEX_FILENAME
+from index import INDEX_FILENAME, Index
 
 
 class MusicDir(BaseModel):
     """Предоставляет актуальные списки ресурсов музыкальной директории."""
 
     path: Path
+    index: Index | None = None
+
+    @classmethod
+    def from_path(cls, path: Path) -> MusicDir:
+        """Создаёт представление директории и загружает её индекс."""
+        index_path = path / INDEX_FILENAME
+        try:
+            index = Index.load(index_path)
+        except (OSError, ValueError) as error:
+            raise ValueError(f"Не удалось загрузить индекс {index_path}: {error}") from error
+        return cls(path=path, index=index)
 
     def _category_files(self, category: str) -> list[Path]:
         """Возвращает файлы поддерживаемых форматов непосредственно из подпапки."""

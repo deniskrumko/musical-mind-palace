@@ -1,1 +1,1 @@
-from .resources import INDEX_FILENAME, Index
+from .resources import INDEX_FILENAME, Index, Tag

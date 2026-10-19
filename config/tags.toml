@@ -1,0 +1,44 @@
+[tag.original_folder]
+name = "Original folder"
+display_name = "Директория"
+type = "string"
+
+[tag.other_names]
+name = "Other names"
+display_name = "Другие названия"
+type = "list"
+
+[tag.genre]
+name = "Genre"
+display_name = "Жанр"
+type = "single_choice"
+choices = [
+    "acoustic",
+    "heavy",
+    "piano",
+    "polystra",
+]
+
+[tag.lyrics]
+name = "Lyrics"
+display_name = "Текст песни"
+type = "text"
+
+[tag.mood]
+name = "Mood"
+display_name = "Настроение"
+type = "multi_choice"
+choices = [
+    "sad",
+    "kind",
+    "joy",
+    "quirky",
+    "arabic",
+    "rage",
+    "funk",
+]
+
+[tag.rating]
+name = "Rating"
+display_name = "Оценка"
+type = "star_rating"

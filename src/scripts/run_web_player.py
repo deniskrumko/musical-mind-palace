@@ -10,9 +10,9 @@ from pathlib import Path
 
 import uvicorn
 
+from core.utils import local_ip
 from scripts import INDEX_DIR
 from web_player.app import create_app
-from web_player.network import local_ip
 
 
 def main() -> None:

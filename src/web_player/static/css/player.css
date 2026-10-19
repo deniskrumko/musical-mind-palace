@@ -6,10 +6,16 @@ main { width: 100%; height: max(100dvh, 680px); min-height: 680px; margin: 0; pa
 h1 { font-size: clamp(24px, 5vw, 36px); letter-spacing: -.04em; }
 h2 { font-size: 21px; overflow-wrap: anywhere; }
 .player { min-width: 0; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 48px clamp(24px, 6vw, 96px); background: #10141b; text-align: center; }
-.art { display: grid; place-items: center; width: 130px; height: 130px; margin: 0 auto 28px; border-radius: 28px; background: linear-gradient(140deg, #294859, #626094); font-size: 65px; color: #c7eadb; }
 .muted { color: #9dafc5; font-size: 14px; overflow-wrap: anywhere; }
-#name { margin: 10px 0 28px; }
+#name { margin: 10px 0 18px; }
 .player > #name, .player > #seek, .player > .times { width: min(100%, 900px); }
+.track-info { width: min(100%, 760px); max-height: min(28dvh, 240px); overflow: auto; margin: 0 0 10px; padding: 14px 18px; border: 1px solid #303a4a; border-radius: 14px; background: #191f2a; text-align: left; scrollbar-width: thin; }
+.track-description { margin: 0 0 12px; color: #d8e0ea; white-space: pre-wrap; overflow-wrap: anywhere; }
+.track-tags { display: grid; grid-template-columns: minmax(100px, 0.35fr) 1fr; gap: 6px 14px; margin: 0; }
+.track-tags:empty { display: none; }
+.track-tags dt { color: #9dafc5; }
+.track-tags dd { margin: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
+.track-resources { margin: 12px 0 0; color: #9dafc5; font-size: 13px; }
 input[type=range] { width: 100%; accent-color: #a6e3c4; cursor: pointer; }
 .times { display: flex; justify-content: space-between; color: #9dafc5; font-size: 13px; font-variant-numeric: tabular-nums; }
 button { font: inherit; border: 1px solid #3a465a; border-radius: 12px; background: #252e3d; color: inherit; cursor: pointer; min-height: 46px; padding: 10px 16px; touch-action: manipulation; }
@@ -57,4 +63,4 @@ body:has(#playlist:modal) { overflow: hidden; }
   .playlist::backdrop { background: rgb(0 0 0 / 70%); }
   .playlist-header { position: sticky; top: -20px; background: #191f2a; padding: 8px 0; z-index: 1; }
 }
-@media (max-width: 480px) { main { padding: 24px 14px; } .player { padding: 24px 18px; border-radius: 18px; } .art { width: 110px; height: 110px; } .controls { gap: 12px; flex-wrap: wrap; } .controls .directory-button { width: 42px; height: 42px; } }
+@media (max-width: 480px) { main { padding: 24px 14px; } .player { padding: 24px 18px; border-radius: 18px; } .track-info { max-height: 24dvh; padding: 12px; } .track-tags { grid-template-columns: 1fr; gap: 2px; } .track-tags dd { margin-bottom: 7px; } .controls { gap: 12px; flex-wrap: wrap; } .controls .directory-button { width: 42px; height: 42px; } }

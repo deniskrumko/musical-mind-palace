@@ -54,7 +54,9 @@ def test_logic_project_is_atomic(tmp_path: Path, extension: str) -> None:
     assert crawl(tmp_path, [tmp_path / "Input"], output) == 1
     destination = output / "Hello"
     assert (destination / f"Session{extension}" / "Media" / "track.mp3").is_file()
-    assert Index.load(destination / "INDEX.md").tags["Original folder"] == "Input/Hello (test)"
+    assert (
+        Index.load(destination / "INDEX.md").tags["original_folder"].value == "Input/Hello (test)"
+    )
     assert not source.exists()
 
 
@@ -66,9 +68,11 @@ def test_merge_preserves_files_projects_and_unique_tags(
     source = music(tmp_path / "Input" / "Hello (new)")
     destination = music(tmp_path / "Index" / "Hello")
     (source / "INDEX.md").write_text(
-        "Новое описание\n\n## Mood\nНовое\n## Original folder\nСтарый путь\n"
+        "Новое описание\n\n## Other names\n- новое имя\n## Original folder\nСтарый путь\n"
     )
-    (destination / "INDEX.md").write_text("Описание\n\n## Mood\nСтарое\n## Keep\nДа\n")
+    (destination / "INDEX.md").write_text(
+        "Описание\n\n## Other names\n- старое имя\n## Original folder\nСтарое описание\n"
+    )
     music(source / f"Session{extension}")
     music(destination / f"Session{extension}")
     music(source / "Assets")
@@ -80,11 +84,9 @@ def test_merge_preserves_files_projects_and_unique_tags(
     assert (destination / "Assets" / "track (2).mp3").is_file()
     assert (destination / f"Session (2){extension}" / "track.mp3").is_file()
     index = Index.load(destination / "INDEX.md")
-    assert index.tags == {
-        "Mood": "Новое",
-        "Keep": "Да",
-        "Original folder": "Input/Hello (new)",
-    }
+    assert set(index.tags) == {"other_names", "original_folder"}
+    assert index.tags["other_names"].value == ["новое имя"]
+    assert index.tags["original_folder"].value == "Input/Hello (new)"
     assert "Новое описание" in index.description
 
 
