@@ -20,10 +20,15 @@
       if (!track || track.directory !== data.directory) continue;
       if (track.id === data.track_id) track.name = data.filename + data.extension;
       track.description = data.description.trim();
-      track.tags = Object.entries(data.tags).map(([key, value]) => ({
-        name: data.definitions[key].name, display_name: data.definitions[key].display_name,
-        type: data.definitions[key].type, value,
-      }));
+      track.tags = Object.entries(data.tags).map(([key, value]) => {
+        const definition = data.definitions[key];
+        return {
+          name: definition.name, display_name: definition.display_name,
+          type: definition.type, value,
+          ...(definition.type === "album_selector"
+            ? { display_value: value.map((id) => data.albums[id].display_name) } : {}),
+        };
+      });
     }
   }
 
@@ -203,8 +208,9 @@
       const term = document.createElement("dt");
       term.textContent = tag.display_name ?? tag.name;
       const value = document.createElement("dd");
-      value.textContent = typeof tag.value === "boolean" ? (tag.value ? "Да" : "Нет")
-        : Array.isArray(tag.value) ? tag.value.join(", ") : String(tag.value);
+      const displayValue = tag.display_value ?? tag.value;
+      value.textContent = typeof displayValue === "boolean" ? (displayValue ? "Да" : "Нет")
+        : Array.isArray(displayValue) ? displayValue.join(", ") : String(displayValue);
       tags.append(term, value);
     }
     element("tags-section").hidden = editor.active || !trackTags.length;

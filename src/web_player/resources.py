@@ -5,8 +5,8 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt
 
-from index import Tag
-from index.resources import TagDefinition
+from index import Album, Tag
+from index.tags import TagDefinition
 
 
 class MetadataUpdate(BaseModel):
@@ -28,6 +28,7 @@ class MetadataEditor(MetadataUpdate):
     track_id: str
     extension: str
     definitions: dict[str, TagDefinition]
+    albums: dict[str, Album]
 
 
 class Track(BaseModel):

@@ -262,9 +262,11 @@
     choiceControl(definition, value) {
       const container = document.createElement("div");
       container.className = "editor-choices";
-      const multiple = definition.type === "multi_choice";
+      const albumSelector = definition.type === "album_selector";
+      const multiple = definition.type === "multi_choice" || albumSelector;
       container.setAttribute("role", "group");
       const selected = new Set(multiple ? (value ?? []) : (value ? [value] : []));
+      const selectedOrder = [...selected];
       const buttons = [];
       /** Отображает выбранное состояние всех вариантов. */
       const update = () => {
@@ -272,26 +274,37 @@
           button.setAttribute("aria-pressed", String(selected.has(button.value)));
         }
       };
-      for (const choice of definition.choices) {
-        const button = this.button(choice, `${definition.display_name}: ${choice}`, () => {
+      const choices = albumSelector
+        ? Object.entries(this.data.albums).map(([id, album]) => ({ value: id, label: album.display_name }))
+        : definition.choices.map((choice) => ({ value: choice, label: choice }));
+      for (const choice of choices) {
+        const button = this.button(choice.label, `${definition.display_name}: ${choice.label}`, () => {
+          const value = choice.value;
           if (multiple) {
-            if (selected.has(choice)) selected.delete(choice);
-            else selected.add(choice);
+            if (selected.has(value)) {
+              selected.delete(value);
+              selectedOrder.splice(selectedOrder.indexOf(value), 1);
+            } else {
+              selected.add(value);
+              selectedOrder.push(value);
+            }
           } else {
             selected.clear();
-            selected.add(choice);
+            selected.add(value);
           }
           update();
         });
-        button.value = choice;
+        button.value = choice.value;
         buttons.push(button);
         container.append(button);
       }
       update();
       return {
         element: container,
-        get: () => multiple ? definition.choices.filter((choice) => selected.has(choice)) : (selected.values().next().value ?? null),
-        clear: () => { selected.clear(); update(); },
+        get: () => albumSelector ? selectedOrder.filter((id) => selected.has(id))
+          : multiple ? definition.choices.filter((choice) => selected.has(choice))
+          : (selected.values().next().value ?? null),
+        clear: () => { selected.clear(); selectedOrder.splice(0); update(); },
       };
     }
 
@@ -342,7 +355,7 @@
       for (const [key, definition] of Object.entries(this.data.definitions)) {
         const value = this.data.tags[key];
         const control = definition.type === "list" ? this.listControl(definition, value)
-          : definition.type === "single_choice" || definition.type === "multi_choice" ? this.choiceControl(definition, value)
+          : definition.type === "single_choice" || definition.type === "multi_choice" || definition.type === "album_selector" ? this.choiceControl(definition, value)
           : definition.type === "star_rating" ? this.ratingControl(value)
           : definition.type === "bool" ? this.booleanControl(definition, value)
           : this.simpleControl(definition, value);

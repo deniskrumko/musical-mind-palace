@@ -5,8 +5,10 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-import index.resources as index_resources
+import index.tags as tags
 from index import Index, Tag
+from index.tags import get_tag_definitions, parse_tag_config
+from index.utils import trim_trailing_blank_lines
 
 
 def test_parse_list_tags_and_preserve_description() -> None:
@@ -88,7 +90,7 @@ def test_text_and_choice_tags_use_configured_values() -> None:
     assert lyrics.tags["lyrics"].value == "Первая строка\n\nВторая строка"
     assert Index.parse(lyrics.render()) == lyrics
     assert Tag(name="Genre", type="single_choice", value="heavy")
-    assert Tag(name="Mood", type="multi_choice", value=["sad", "funk"])
+    assert Tag(name="Mood", type="multi_choice", value=["sad", "funky"])
     with pytest.raises(ValidationError):
         Tag(name="Genre", type="single_choice", value="unknown")
     with pytest.raises(ValidationError):
@@ -107,7 +109,7 @@ def test_trims_only_trailing_blank_lines_from_string_values() -> None:
     """Удаляет завершающие пустые строки, сохраняя внутренние переносы текста."""
     index = Index.parse("## Original folder\nПуть\n\n")
     assert index.tags["original_folder"].value == "Путь"
-    assert index_resources.trim_trailing_blank_lines("Первая\n\nВторая\n\n") == "Первая\n\nВторая"
+    assert trim_trailing_blank_lines("Первая\n\nВторая\n\n") == "Первая\n\nВторая"
 
 
 def test_unknown_tag_and_empty_values_are_rejected() -> None:
@@ -130,7 +132,7 @@ name = "Duplicate"
 type = "text"
 """
     with pytest.raises(ValueError, match="уникальными"):
-        index_resources.parse_tag_config(config)
+        parse_tag_config(config)
 
 
 def test_config_parses_choice_options_and_rejects_missing_choices() -> None:
@@ -141,18 +143,18 @@ name = "Genre"
 type = "single_choice"
 choices = ["metal", "folk"]
 """
-    definitions = index_resources.parse_tag_config(config)
+    definitions = parse_tag_config(config)
     assert definitions["genre"].choices == ("metal", "folk")
     assert definitions["genre"].display_name == "Genre"
 
-    definitions_with_display_name = index_resources.parse_tag_config(
+    definitions_with_display_name = parse_tag_config(
         '[tag.genre]\nname = "Genre"\ndisplay_name = "Жанр"\ntype = "single_choice"\n'
         'choices = ["metal"]'
     )
     assert definitions_with_display_name["genre"].display_name == "Жанр"
 
     with pytest.raises(ValidationError):
-        index_resources.parse_tag_config('[tag.genre]\nname = "Genre"\ntype = "multi_choice"')
+        parse_tag_config('[tag.genre]\nname = "Genre"\ntype = "multi_choice"')
 
 
 def test_config_is_read_once_per_process(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -171,15 +173,15 @@ def test_config_is_read_once_per_process(tmp_path: Path, monkeypatch: pytest.Mon
             reads += 1
         return original_read_text(path, *args, **kwargs)
 
-    monkeypatch.setattr(index_resources, "TAG_CONFIG_PATH", config_path)
+    monkeypatch.setattr(tags, "TAG_CONFIG_PATH", config_path)
     monkeypatch.setattr(Path, "read_text", count_config_reads)
-    index_resources.get_tag_definitions.cache_clear()
+    get_tag_definitions.cache_clear()
     try:
         Tag(name="Original folder", type="string", value="Первая папка")
         Tag(name="Original folder", type="string", value="Вторая папка")
         assert reads == 1
     finally:
-        index_resources.get_tag_definitions.cache_clear()
+        get_tag_definitions.cache_clear()
 
 
 def test_missing_index(tmp_path: Path) -> None:

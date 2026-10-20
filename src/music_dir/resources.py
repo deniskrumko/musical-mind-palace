@@ -1,8 +1,7 @@
 """Представление содержимого музыкальной директории."""
 
-from __future__ import annotations
-
 from pathlib import Path
+from typing import Self
 
 from pydantic import BaseModel
 
@@ -18,7 +17,7 @@ class MusicDir(BaseModel):
     index: Index | None = None
 
     @classmethod
-    def from_path(cls, path: Path) -> MusicDir:
+    def from_path(cls, path: Path) -> Self:
         """Создаёт представление директории и загружает её индекс."""
         index_path = path / INDEX_FILENAME
         try:

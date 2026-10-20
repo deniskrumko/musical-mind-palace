@@ -4,8 +4,8 @@ from hashlib import sha256
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 
-from index import INDEX_FILENAME, Index
-from index.resources import get_tag_definitions
+from index import INDEX_FILENAME, Index, get_albums
+from index.tags import get_tag_definitions
 from web_player.renaming import (
     MetadataConflictError,
     audio_revision,
@@ -54,6 +54,7 @@ def editor_data(root: Path, track: Track, index: Index, source: bytes | None) ->
         tags={key: tag.value for key, tag in index.tags.items()},
         revision=source_revision(source),
         definitions=dict(get_tag_definitions()),
+        albums=dict(get_albums()),
     )
 
 

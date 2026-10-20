@@ -3,6 +3,7 @@
 from hashlib import sha256
 from pathlib import Path
 
+from index import get_albums
 from index.utils import get_music_dirs
 from music_dir import MusicDir
 from web_player.resources import PlayerQueue, Track
@@ -10,6 +11,7 @@ from web_player.resources import PlayerQueue, Track
 
 def scan_library(index_dir: Path) -> PlayerQueue:
     """Собирает очередь в порядке директорий и их музыкальных файлов."""
+    get_albums()
     index_dir = index_dir.expanduser().resolve()
     tracks: dict[str, Track] = {}
     directories = get_music_dirs(index_dir)

@@ -119,6 +119,31 @@ def print_attention_folders(index_dir: Path) -> None:
             print("- нет")
 
 
+def print_category_warnings(index_dir: Path) -> None:
+    """Предупреждает о файлах с неподходящими расширениями в папках категорий."""
+    warnings: list[tuple[Path, str, set[str]]] = []
+    for folder in get_music_dirs(index_dir, exclude_dirs=EXCLUDE_DIRS):
+        for category, extensions in CATEGORY_EXTENSIONS.items():
+            category_dir = folder / category
+            if not is_directory(category_dir):
+                continue
+            for current, directories, files in os.walk(category_dir, onerror=raise_walk_error):
+                parent = Path(current)
+                entries = [parent / name for name in files + directories]
+                for entry in entries:
+                    if is_file(entry) and entry.suffix.lower() not in extensions:
+                        warnings.append((entry, category, extensions))
+                directories[:] = [name for name in directories if is_directory(parent / name)]
+
+    print("\nПредупреждения о расширениях в папках категорий:")
+    if not warnings:
+        print("- нет")
+        return
+    for path, category, extensions in warnings:
+        allowed = ", ".join(sorted(extensions))
+        print(f"- {path}: папка {category}, допустимы расширения {allowed}")
+
+
 def main(argv: list[str] | None = None) -> int:
     """Запускает сортировку и сообщает об ошибках или отмене."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -135,6 +160,7 @@ def main(argv: list[str] | None = None) -> int:
             print("\nТекущее состояние папок (dry-run):")
         else:
             print(f"Готово. Перенесено файлов: {count}.")
+        print_category_warnings(INDEX_DIR)
         print_attention_folders(INDEX_DIR)
     except KeyboardInterrupt:
         print("\nСортировка остановлена пользователем.", file=sys.stderr)

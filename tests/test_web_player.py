@@ -351,11 +351,15 @@ def test_metadata_editor_saves_all_types_and_updates_directory(tmp_path: Path) -
         assert list(data["definitions"]) == [
             "original_folder",
             "other_names",
+            "album",
             "genre",
+            "specialty",
+            "sounds_like",
             "lyrics",
             "has_vocals",
             "state",
             "mood",
+            "speed",
             "rating",
         ]
         assert data["definitions"]["genre"]["display_name"] == "Жанр"

@@ -259,10 +259,11 @@ def test_main_reports_attention_folders_after_sorting(
     monkeypatch.setattr(script, "EXCLUDE_DIRS", [excluded])
     assert script.main([]) == 0
     output = capsys.readouterr().out
+    assert f"{unusual_category / 'dict' / 'notes.txt'}: папка dict" in output
     summary = output.split("Готово. Перенесено файлов: 2.")[1]
     other_report, rest = summary.split("Папки с subdirs:")
     subdir_report, empty_report = rest.split("Папки без файлов кроме индекса:")
-    assert other_report.splitlines() == ["", "", "Папки с other_files:", f"- {other}", ""]
+    assert other_report.splitlines()[-4:] == ["", "Папки с other_files:", f"- {other}", ""]
     assert subdir_report.splitlines() == ["", f"- {nested}", ""]
     assert empty_report.splitlines() == ["", f"- {empty}", f"- {empty_subdir}"]
     assert str(excluded) not in summary

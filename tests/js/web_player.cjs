@@ -137,12 +137,14 @@ async function page(withMedia = true, unsupportedActions = false, trackCount = 5
     definitions: {
       original_folder: {name: "Original folder", display_name: "Директория", type: "string"},
       other_names: {name: "Other names", display_name: "Другие названия", type: "list"},
+      album: {name: "Album", display_name: "Альбом", type: "album_selector"},
       genre: {name: "Genre", display_name: "Жанр", type: "single_choice", choices: ["piano", "heavy"]},
       lyrics: {name: "Lyrics", display_name: "Текст песни", type: "text"},
       has_vocals: {name: "Has vocals", display_name: "Есть вокал", type: "bool"},
       mood: {name: "Mood", display_name: "Настроение", type: "multi_choice", choices: ["sad", "kind"]},
       rating: {name: "Rating", display_name: "Оценка", type: "star_rating"},
     },
+    albums: {},
   }};
   const context = vm.createContext({
     navigator: withMedia ? { mediaSession: media } : {},
@@ -202,7 +204,7 @@ async function testMetadataEditor() {
   assert.equal(get("playlist-tracks").children[1].children[0].disabled, true);
   assert.equal(get("metadata-description").value, metadataServer.data.description);
   const fields = get("metadata-fields");
-  assert.equal(fields.children.length, 9);
+  assert.equal(fields.children.length, 10);
   assert.equal(get("metadata-filename").value, "1");
   get("metadata-filename").value = "Новое имя";
   assert.equal(get("metadata-rating").children.filter(child => child.tagName === "button").length, 10);
@@ -216,12 +218,10 @@ async function testMetadataEditor() {
   list.children[0].children[1].children[0].value = "Второе название";
   list.children[0].children[0].children[1].emit("click");
   assert.equal(list.children[0].children.length, 1);
-  get("metadata-genre").value = "piano";
-  get("metadata-mood").children[1].children[0].checked = true;
-  assert.equal(get("metadata-has_vocals").type, "checkbox");
-  assert.equal(get("metadata-has_vocals").checked, false);
-  get("metadata-has_vocals").checked = true;
-  get("metadata-has_vocals").emit("change");
+  get("metadata-genre").children[0].emit("click");
+  get("metadata-mood").children[1].emit("click");
+  assert.equal(get("metadata-has_vocals").children[1]["aria-pressed"], "true");
+  get("metadata-has_vocals").children[0].emit("click");
   get("metadata-lyrics").value = "Куплет\nПрипев";
   get("metadata-description").value = "# Новое описание";
   const unload = { preventDefault() { this.prevented = true; } };
