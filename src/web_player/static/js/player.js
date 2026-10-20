@@ -158,21 +158,35 @@
     element("directory").textContent = track?.directory ?? "Добавьте записи и перезапустите сервер";
     const description = element("description");
     description.textContent = track?.description ?? "";
-    description.hidden = !track?.description;
+    element("description-section").hidden = !track?.description;
     const tags = element("tags");
     tags.replaceChildren();
-    for (const tag of track?.tags ?? []) {
+    const trackTags = track?.tags ?? [];
+    for (const tag of trackTags) {
       const term = document.createElement("dt");
       term.textContent = tag.name;
       const value = document.createElement("dd");
       value.textContent = Array.isArray(tag.value) ? tag.value.join(", ") : String(tag.value);
       tags.append(term, value);
     }
-    element("resources").textContent = track
-      ? `Музыка: ${track.music_count} · LogicX: ${track.logic_count} · Табы: ${track.tab_count}`
-      : "";
+    element("tags-section").hidden = !trackTags.length;
+    const resources = element("resources");
+    resources.replaceChildren();
+    const trackResources = [
+      ["Музыка", track?.music_count],
+      ["LogicX", track?.logic_count],
+      ["Табы", track?.tab_count],
+    ].filter(([, count]) => count > 0);
+    for (const [name, count] of trackResources) {
+      const term = document.createElement("dt");
+      term.textContent = name;
+      const value = document.createElement("dd");
+      value.textContent = String(count);
+      resources.append(term, value);
+    }
+    element("resources-section").hidden = !trackResources.length;
     element("count").textContent = state
-      ? `Всего директорий: ${state.total_directories} · Музыкальных файлов: ${state.total}`
+      ? `Директории: ${state.total_directories} · Файлы: ${state.total}`
       : "";
     element("play").disabled = busy || !track;
     element("open-file").disabled = busy || !track || openingFile;
@@ -387,12 +401,14 @@
     }
   });
   audio.addEventListener("play", () => {
-    element("play").textContent = "⏸";
+    element("play-icon").hidden = true;
+    element("pause-icon").hidden = false;
     element("play").setAttribute("aria-label", "Пауза");
     updateMediaSession();
   });
   audio.addEventListener("pause", () => {
-    element("play").textContent = "▶";
+    element("play-icon").hidden = false;
+    element("pause-icon").hidden = true;
     element("play").setAttribute("aria-label", "Воспроизвести");
     save();
     updateMediaSession();

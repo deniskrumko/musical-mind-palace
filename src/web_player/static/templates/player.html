@@ -10,11 +10,24 @@
 <body>
   <main>
     <section class="player" aria-label="Плеер">
-      <section id="track-info" class="track-info" aria-label="Информация о музыкальной директории">
-        <p id="description" class="track-description" hidden></p>
-        <dl id="tags" class="track-tags"></dl>
-        <p id="resources" class="track-resources"></p>
-      </section>
+      <article id="track-info" class="track-info" aria-label="Описание текущего файла">
+        <header class="track-heading">
+          <h1 id="name">Подождите</h1>
+          <h2 id="directory" class="muted">Загрузка библиотеки…</h2>
+        </header>
+        <section id="description-section" class="track-section" hidden>
+          <h3>Описание</h3>
+          <p id="description" class="track-description"></p>
+        </section>
+        <section id="tags-section" class="track-section" hidden>
+          <h3>Теги</h3>
+          <dl id="tags" class="track-tags"></dl>
+        </section>
+        <section id="resources-section" class="track-section" hidden>
+          <h3>Ресурсы</h3>
+          <dl id="resources" class="track-tags track-resources"></dl>
+        </section>
+      </article>
       <p id="status" role="status" aria-live="polite"></p>
       <p id="count" class="muted"></p>
     </section>
@@ -31,21 +44,20 @@
     <input id="seek" class="control-scroll-bar" type="range" min="0" max="0" value="0" step="0.1" disabled>
     <audio id="audio" preload="metadata"></audio>
     <div class="control-left-block">
-      <button id="play" class="primary" aria-label="Воспроизвести" disabled>▶</button>
-      <button id="previous" aria-label="Предыдущий трек" disabled>⏮</button>
-      <button id="next" aria-label="Следующий трек" disabled>⏭</button>
-      <button id="previous-directory" class="directory-button" aria-label="Предыдущая директория" title="Предыдущая директория" disabled>↶</button>
-      <button id="next-directory" class="directory-button" aria-label="Следующая директория" title="Следующая директория" disabled>↷</button>
+      <button id="play" class="primary" aria-label="Воспроизвести" disabled>
+        <span id="play-icon" class="control-icon icon-play" aria-hidden="true"></span>
+        <span id="pause-icon" class="control-icon icon-pause" aria-hidden="true" hidden></span>
+      </button>
+      <button id="previous" aria-label="Предыдущий трек" disabled><span class="control-icon icon-previous" aria-hidden="true"></span></button>
+      <button id="next" aria-label="Следующий трек" disabled><span class="control-icon icon-next" aria-hidden="true"></span></button>
+      <button id="previous-directory" class="directory-button" aria-label="Предыдущая директория" title="Предыдущая директория" disabled><span class="control-icon icon-previous-directory" aria-hidden="true"></span></button>
+      <button id="next-directory" class="directory-button" aria-label="Следующая директория" title="Следующая директория" disabled><span class="control-icon icon-next-directory" aria-hidden="true"></span></button>
     </div>
     <div class="control-time control-time-float"><span id="elapsed">0:00</span><span aria-hidden="true"> / </span><span id="duration">—:—</span></div>
-    <div class="control-title">
-      <h2 id="name">Подождите</h2>
-      <p id="directory" class="muted">Загрузка библиотеки…</p>
-    </div>
     <div class="control-right-block">
-      <button id="open-file" aria-label="Открыть файл в Finder" title="Показать текущий файл в Finder" disabled><span aria-hidden="true">↗</span><span class="control-action-label">Открыть</span></button>
-      <button id="shuffle" aria-label="Перемешать треки" disabled><span aria-hidden="true">⇄</span><span class="control-action-label">Перемешать</span></button>
-      <button id="toggle-playlist" aria-label="Показать список" aria-expanded="false" aria-pressed="false" aria-controls="playlist"><span aria-hidden="true">☷</span><span class="control-action-label">Список</span></button>
+      <button id="open-file" aria-label="Открыть файл в Finder" title="Показать текущий файл в Finder" disabled><span class="control-icon icon-open-file" aria-hidden="true"></span><span class="control-action-label">Открыть</span></button>
+      <button id="shuffle" aria-label="Перемешать треки" disabled><span class="control-icon icon-shuffle" aria-hidden="true"></span><span class="control-action-label">Перемешать</span></button>
+      <button id="toggle-playlist" aria-label="Показать список" aria-expanded="false" aria-pressed="false" aria-controls="playlist"><span class="control-icon icon-playlist" aria-hidden="true"></span><span class="control-action-label">Список</span></button>
     </div>
   </footer>
 </body>

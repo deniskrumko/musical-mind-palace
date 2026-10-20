@@ -162,7 +162,7 @@ async function main() {
   assert.equal(get("playlist").classList.contains("is-open"), false);
   const audio = get("audio");
   assert.equal(media.metadata.title, "1.mp3");
-  assert.equal(get("count").textContent, "Всего директорий: 3 · Музыкальных файлов: 5");
+  assert.equal(get("count").textContent, "Директории: 3 · Файлы: 5");
   assert.equal(media.metadata.artist, "А");
   assert.equal(media.playbackState, "paused");
   assert.equal(get("open-file").disabled, false);
