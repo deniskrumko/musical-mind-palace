@@ -177,24 +177,47 @@
       element("metadata-fields").append(section);
     }
 
-    /** Создаёт поле строки, текста или одиночного выбора. */
+    /** Создаёт поле строки или текста. */
     simpleControl(definition, value) {
       const type = definition.type;
-      const input = document.createElement(type === "text" ? "textarea" : type === "single_choice" ? "select" : "input");
-      if (type === "single_choice") {
-        for (const choice of ["", ...definition.choices]) {
-          const option = document.createElement("option");
-          option.value = choice;
-          option.textContent = choice || "Не выбрано";
-          input.append(option);
-        }
-      } else if (type === "text") input.rows = 3;
+      const input = document.createElement(type === "text" ? "textarea" : "input");
+      if (type === "text") input.rows = 3;
       else input.type = "text";
       input.value = value ?? "";
       return {
         element: input,
         get: () => input.value.trim() ? input.value : null,
         clear: () => { input.value = ""; input.focus(); },
+      };
+    }
+
+    /** Создаёт три кнопки для логического тега, включая неопределённое значение. */
+    booleanControl(definition, value) {
+      const container = document.createElement("div");
+      container.className = "editor-choices";
+      container.setAttribute("role", "group");
+      let selected = typeof value === "boolean" ? value : null;
+      const options = [[true, "Да"], [false, "Нет"], [null, "Не указано"]];
+      const buttons = [];
+      /** Обновляет выбранное состояние кнопок логического поля. */
+      const update = () => {
+        buttons.forEach(({ button, option }) => {
+          button.setAttribute("aria-pressed", String(selected === option));
+        });
+      };
+      for (const [option, text] of options) {
+        const button = this.button(text, `${definition.display_name}: ${text}`, () => {
+          selected = option;
+          update();
+        });
+        buttons.push({ button, option });
+        container.append(button);
+      }
+      update();
+      return {
+        element: container,
+        get: () => selected,
+        clear: () => { selected = null; update(); },
       };
     }
 
@@ -235,28 +258,40 @@
       };
     }
 
-    /** Создаёт множественный выбор с отдельным флажком для каждого варианта. */
-    multipleControl(definition, values) {
+    /** Создаёт группу кнопок с одиночным или множественным выбором. */
+    choiceControl(definition, value) {
       const container = document.createElement("div");
       container.className = "editor-choices";
+      const multiple = definition.type === "multi_choice";
       container.setAttribute("role", "group");
-      const inputs = [];
+      const selected = new Set(multiple ? (value ?? []) : (value ? [value] : []));
+      const buttons = [];
+      /** Отображает выбранное состояние всех вариантов. */
+      const update = () => {
+        for (const button of buttons) {
+          button.setAttribute("aria-pressed", String(selected.has(button.value)));
+        }
+      };
       for (const choice of definition.choices) {
-        const label = document.createElement("label");
-        const input = document.createElement("input");
-        input.type = "checkbox";
-        input.value = choice;
-        input.checked = values?.includes(choice) ?? false;
-        const text = document.createElement("span");
-        text.textContent = choice;
-        label.append(input, text);
-        container.append(label);
-        inputs.push(input);
+        const button = this.button(choice, `${definition.display_name}: ${choice}`, () => {
+          if (multiple) {
+            if (selected.has(choice)) selected.delete(choice);
+            else selected.add(choice);
+          } else {
+            selected.clear();
+            selected.add(choice);
+          }
+          update();
+        });
+        button.value = choice;
+        buttons.push(button);
+        container.append(button);
       }
+      update();
       return {
         element: container,
-        get: () => inputs.filter((input) => input.checked).map((input) => input.value),
-        clear: () => { for (const input of inputs) input.checked = false; },
+        get: () => multiple ? definition.choices.filter((choice) => selected.has(choice)) : (selected.values().next().value ?? null),
+        clear: () => { selected.clear(); update(); },
       };
     }
 
@@ -307,8 +342,9 @@
       for (const [key, definition] of Object.entries(this.data.definitions)) {
         const value = this.data.tags[key];
         const control = definition.type === "list" ? this.listControl(definition, value)
-          : definition.type === "multi_choice" ? this.multipleControl(definition, value)
+          : definition.type === "single_choice" || definition.type === "multi_choice" ? this.choiceControl(definition, value)
           : definition.type === "star_rating" ? this.ratingControl(value)
+          : definition.type === "bool" ? this.booleanControl(definition, value)
           : this.simpleControl(definition, value);
         this.fields.push({ key, get: control.get });
         this.appendField(key, definition.display_name, control);

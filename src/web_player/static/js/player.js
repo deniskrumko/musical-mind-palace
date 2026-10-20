@@ -21,7 +21,8 @@
       if (track.id === data.track_id) track.name = data.filename + data.extension;
       track.description = data.description.trim();
       track.tags = Object.entries(data.tags).map(([key, value]) => ({
-        name: data.definitions[key].name, type: data.definitions[key].type, value,
+        name: data.definitions[key].name, display_name: data.definitions[key].display_name,
+        type: data.definitions[key].type, value,
       }));
     }
   }
@@ -200,9 +201,10 @@
     const trackTags = allTags.filter((tag) => tag !== lyrics && tag !== rating);
     for (const tag of trackTags) {
       const term = document.createElement("dt");
-      term.textContent = tag.name;
+      term.textContent = tag.display_name ?? tag.name;
       const value = document.createElement("dd");
-      value.textContent = Array.isArray(tag.value) ? tag.value.join(", ") : String(tag.value);
+      value.textContent = typeof tag.value === "boolean" ? (tag.value ? "Да" : "Нет")
+        : Array.isArray(tag.value) ? tag.value.join(", ") : String(tag.value);
       tags.append(term, value);
     }
     element("tags-section").hidden = editor.active || !trackTags.length;

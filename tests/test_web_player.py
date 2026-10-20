@@ -353,6 +353,8 @@ def test_metadata_editor_saves_all_types_and_updates_directory(tmp_path: Path) -
             "other_names",
             "genre",
             "lyrics",
+            "has_vocals",
+            "state",
             "mood",
             "rating",
         ]
@@ -363,6 +365,7 @@ def test_metadata_editor_saves_all_types_and_updates_directory(tmp_path: Path) -
             "other_names": ["Песня", "Song"],
             "genre": "piano",
             "lyrics": "\nПервый куплет\n\n### Припев\nТекст",
+            "has_vocals": True,
             "mood": ["sad", "kind"],
             "rating": 10,
         }

@@ -10,11 +10,11 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, StrictInt, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, model_validator
 
 INDEX_FILENAME = "INDEX.md"
 TAG_CONFIG_PATH = Path(__file__).resolve().parents[2] / "config" / "tags.toml"
-TagType = Literal["string", "text", "list", "single_choice", "multi_choice", "star_rating"]
+TagType = Literal["string", "text", "list", "single_choice", "multi_choice", "star_rating", "bool"]
 CHOICE_TYPES = {"single_choice", "multi_choice"}
 LIST_TYPES = {"list", "multi_choice"}
 
@@ -59,7 +59,8 @@ class Tag(BaseModel):
 
     name: str
     type: TagType
-    value: str | list[str] | StrictInt
+    value: str | list[str] | StrictInt | StrictBool
+    display_name: str | None = None
 
     @model_validator(mode="after")
     def validate_against_config(self) -> Tag:
@@ -72,12 +73,18 @@ class Tag(BaseModel):
             raise ValueError(
                 f"Тип тега {self.name!r} должен быть {definition.type!r}, получен {self.type!r}"
             )
+        self.display_name = definition.display_name
 
         if self.type == "star_rating":
             if not isinstance(self.value, int) or isinstance(self.value, bool):
                 raise ValueError(f"Значение тега {self.name!r} должно быть целым числом")
             if not 1 <= self.value <= 10:
                 raise ValueError(f"Значение тега {self.name!r} должно быть от 1 до 10")
+            return self
+
+        if self.type == "bool":
+            if not isinstance(self.value, bool):
+                raise ValueError(f"Значение тега {self.name!r} должно быть логическим")
             return self
 
         if self.type in LIST_TYPES:
@@ -190,7 +197,9 @@ class Index(BaseModel):
                 value_text = raw_value
             definition = definitions[key]
             if definition.type == "star_rating":
-                value: str | list[str] | int = parse_star_rating(name, value_text)
+                value: str | list[str] | int | bool = parse_star_rating(name, value_text)
+            elif definition.type == "bool":
+                value = parse_bool_value(name, value_text)
             elif definition.type in LIST_TYPES:
                 value = parse_list_value(name, value_text)
             else:
@@ -205,7 +214,7 @@ class Index(BaseModel):
             raise ValueError(f"Индекс не должен быть символической ссылкой: {path}")
         return cls.parse(path.read_text(encoding="utf-8")) if path.exists() else cls()
 
-    def set(self, key: str, value: str | list[str] | int) -> None:
+    def set(self, key: str, value: str | list[str] | int | bool) -> None:
         """Записывает значение тега по ключу из конфигурации."""
         definition = get_tag_definitions().get(key)
         if definition is None:
@@ -260,3 +269,11 @@ def parse_star_rating(name: str, text: str) -> int:
     if not re.fullmatch(r"\d+", value):
         raise ValueError(f"Значение рейтинга {name!r} должно быть целым числом от 1 до 10")
     return int(value)
+
+
+def parse_bool_value(name: str, text: str) -> bool:
+    """Разбирает логическое значение тега из Markdown."""
+    value = trim_trailing_blank_lines(text).strip().lower()
+    if value not in {"true", "false"}:
+        raise ValueError(f"Значение тега {name!r} должно быть true или false")
+    return value == "true"

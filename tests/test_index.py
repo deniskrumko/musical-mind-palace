@@ -70,6 +70,18 @@ def test_star_rating_is_an_integer_between_one_and_ten() -> None:
         Index.parse("## Rating\n10.0\n")
 
 
+def test_boolean_tag_round_trips_as_true_or_false() -> None:
+    """Читает логические теги и сохраняет значения true и false."""
+    for text, expected in (("true", True), ("false", False)):
+        index = Index.parse(f"## Has vocals\n{text}\n")
+        assert index.tags["has_vocals"].value is expected
+        assert Index.parse(index.render()) == index
+    with pytest.raises(ValueError, match="true или false"):
+        Index.parse("## Has vocals\nда\n")
+    with pytest.raises(ValidationError):
+        Tag(name="Has vocals", type="bool", value="true")
+
+
 def test_text_and_choice_tags_use_configured_values() -> None:
     """Сохраняет формат текста и проверяет варианты выбора по конфигу."""
     lyrics = Index.parse("## Lyrics\nПервая строка\n\nВторая строка\n\n")

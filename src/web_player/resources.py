@@ -3,7 +3,7 @@
 import random
 from pathlib import Path
 
-from pydantic import BaseModel, ConfigDict, Field, StrictInt
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt
 
 from index import Tag
 from index.resources import TagDefinition
@@ -18,7 +18,7 @@ class MetadataUpdate(BaseModel):
     file_revision: str
     filename: str
     description: str
-    tags: dict[str, str | list[str] | StrictInt]
+    tags: dict[str, str | list[str] | StrictInt | StrictBool]
 
 
 class MetadataEditor(MetadataUpdate):

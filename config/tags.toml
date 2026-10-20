@@ -1,12 +1,17 @@
 [tag.original_folder]
 name = "Original folder"
-display_name = "Директория"
+display_name = "Исходная директория"
 type = "string"
 
 [tag.other_names]
 name = "Other names"
 display_name = "Другие названия"
 type = "list"
+
+[tag.album]
+name = "Album"
+display_name = "Альбом"
+type = "album_selector"
 
 [tag.genre]
 name = "Genre"
@@ -19,10 +24,48 @@ choices = [
     "polystra",
 ]
 
+[tag.specialty]
+name = "Specialty"
+display_name = "Особенности"
+type = "multi_choice"
+choices = [
+    "async",
+    "bass",
+    "ukulele",
+]
+
+[tag.sounds_like]
+name = "Sounds like"
+display_name = "Похожа на"
+type = "multi_choice"
+choices = [
+    "Metallica",
+    "TOOL",
+    "Nirvana",
+    "Stratovarius",
+]
+
 [tag.lyrics]
 name = "Lyrics"
 display_name = "Текст песни"
 type = "text"
+
+[tag.has_vocals]
+name = "Has vocals"
+display_name = "Есть вокал"
+type = "bool"
+
+[tag.state]
+name = "State"
+display_name = "Состояние"
+type = "single_choice"
+choices = [
+    "riff",
+    "melody",
+    "chords",
+    "parts",
+    "full song",
+]
 
 [tag.mood]
 name = "Mood"
@@ -30,12 +73,22 @@ display_name = "Настроение"
 type = "multi_choice"
 choices = [
     "sad",
+    "depressing",
     "kind",
     "joy",
     "quirky",
     "arabic",
-    "rage",
-    "funk",
+    "angry",
+    "funky",
+]
+
+[tag.speed]
+name = "Speed"
+display_name = "Скорость"
+type = "single_choice"
+choices = [
+    "slow",
+    "fast",
 ]
 
 [tag.rating]

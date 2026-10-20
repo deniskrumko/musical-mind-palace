@@ -133,12 +133,13 @@ async function page(withMedia = true, unsupportedActions = false, trackCount = 5
   const metadataServer = { error: null, writes: [], data: {
     directory: "А", revision: "initial", description: "# Песня\n\nОписание\n\n",
     track_id: "a1", filename: "1", extension: ".mp3", file_revision: "audio-initial",
-    tags: { other_names: ["Название"], rating: 3, mood: ["sad"] },
+    tags: { other_names: ["Название"], rating: 3, mood: ["sad"], has_vocals: false },
     definitions: {
       original_folder: {name: "Original folder", display_name: "Директория", type: "string"},
       other_names: {name: "Other names", display_name: "Другие названия", type: "list"},
       genre: {name: "Genre", display_name: "Жанр", type: "single_choice", choices: ["piano", "heavy"]},
       lyrics: {name: "Lyrics", display_name: "Текст песни", type: "text"},
+      has_vocals: {name: "Has vocals", display_name: "Есть вокал", type: "bool"},
       mood: {name: "Mood", display_name: "Настроение", type: "multi_choice", choices: ["sad", "kind"]},
       rating: {name: "Rating", display_name: "Оценка", type: "star_rating"},
     },
@@ -201,7 +202,7 @@ async function testMetadataEditor() {
   assert.equal(get("playlist-tracks").children[1].children[0].disabled, true);
   assert.equal(get("metadata-description").value, metadataServer.data.description);
   const fields = get("metadata-fields");
-  assert.equal(fields.children.length, 8);
+  assert.equal(fields.children.length, 9);
   assert.equal(get("metadata-filename").value, "1");
   get("metadata-filename").value = "Новое имя";
   assert.equal(get("metadata-rating").children.filter(child => child.tagName === "button").length, 10);
@@ -217,6 +218,10 @@ async function testMetadataEditor() {
   assert.equal(list.children[0].children.length, 1);
   get("metadata-genre").value = "piano";
   get("metadata-mood").children[1].children[0].checked = true;
+  assert.equal(get("metadata-has_vocals").type, "checkbox");
+  assert.equal(get("metadata-has_vocals").checked, false);
+  get("metadata-has_vocals").checked = true;
+  get("metadata-has_vocals").emit("change");
   get("metadata-lyrics").value = "Куплет\nПрипев";
   get("metadata-description").value = "# Новое описание";
   const unload = { preventDefault() { this.prevented = true; } };
@@ -240,7 +245,7 @@ async function testMetadataEditor() {
   assert.deepEqual(metadataServer.writes[0], {
     revision: "initial", description: "# Новое описание",
     file_revision: "audio-initial", filename: "Новое имя",
-    tags: {other_names: ["Второе название"], genre: "piano", lyrics: "Куплет\nПрипев", mood: ["sad", "kind"], rating: 8},
+    tags: {other_names: ["Второе название"], genre: "piano", lyrics: "Куплет\nПрипев", has_vocals: true, mood: ["sad", "kind"], rating: 8},
   });
   assert.equal(get("metadata-form").hidden, true);
   assert.equal(get("description").textContent, "# Новое описание");
