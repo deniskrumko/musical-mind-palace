@@ -9,6 +9,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from core.utils import local_ip
+from index import Index
 from web_player.app import create_app
 from web_player.library import scan_library
 
@@ -23,6 +24,14 @@ def make_song(root: Path, name: str, files: tuple[str, ...]) -> Path:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(b"0123456789")
     return folder
+
+
+def metadata_payload(data: dict, **changes: object) -> dict:
+    """Собирает запрос сохранения редактора с версиями индекса и аудиофайла."""
+    return {
+        key: changes.get(key, data[key])
+        for key in ("revision", "file_revision", "filename", "description", "tags")
+    }
 
 
 def test_library_order_and_metadata(tmp_path):
@@ -323,3 +332,154 @@ def test_playlist_shuffle_and_skipped_tracks(tmp_path):
         assert after["tracks"][:3] == before["tracks"][:3]
         assert after["tracks"][3:] == before["tracks"][3:][::-1]
         assert after["revision"] == before["revision"] + 1
+
+
+def test_metadata_editor_saves_all_types_and_updates_directory(tmp_path: Path) -> None:
+    """Сохраняет все типы тегов в общем индексе и обновляет только его треки."""
+    folder = make_song(tmp_path, "А", ("dict/1.m4a", "bounce/2.mp3"))
+    make_song(tmp_path, "Б", ("bounce/3.mp3",))
+    path = folder / "INDEX.md"
+    original = "# Песня\n\nОписание и https://example.com\n\n## Rating\n3\n"
+    path.write_text(original, encoding="utf-8")
+    with TestClient(create_app(tmp_path)) as client:
+        before = client.get("/api/state").json()
+        track_id = before["current"]["id"]
+        url = f"/api/metadata/{track_id}"
+        data = client.get(url).json()
+        assert data["description"] == Index.parse(original).description
+        assert data["tags"] == {"rating": 3}
+        assert list(data["definitions"]) == [
+            "original_folder",
+            "other_names",
+            "genre",
+            "lyrics",
+            "mood",
+            "rating",
+        ]
+        assert data["definitions"]["genre"]["display_name"] == "Жанр"
+        assert data["definitions"]["genre"]["choices"] == ["acoustic", "heavy", "piano", "polystra"]
+        tags = {
+            "original_folder": "Архив/Песня",
+            "other_names": ["Песня", "Song"],
+            "genre": "piano",
+            "lyrics": "\nПервый куплет\n\n### Припев\nТекст",
+            "mood": ["sad", "kind"],
+            "rating": 10,
+        }
+        response = client.put(
+            url,
+            json=metadata_payload(data, description="# Новое имя\n\nОписание", tags=tags),
+        )
+        assert response.status_code == 200
+        saved = response.json()
+        assert saved["revision"] != data["revision"]
+        index = Index.load(path)
+        assert {key: tag.value for key, tag in index.tags.items()} == tags
+        assert saved["description"] == index.description
+        assert client.get(url).json() == saved
+        state = client.get("/api/state").json()
+        assert state["current"]["id"] == track_id
+        assert state["previous"] == before["previous"]
+        assert [track["id"] for track in state["upcoming"]] == [
+            track["id"] for track in before["upcoming"]
+        ]
+        tracks = client.get("/api/playlist").json()["tracks"]
+        assert tracks[0]["tags"] == tracks[1]["tags"] == state["current"]["tags"]
+        assert tracks[2]["tags"] == []
+        cleared = client.put(url, json=metadata_payload(saved, description="", tags={}))
+        assert cleared.status_code == 200
+        assert path.read_text(encoding="utf-8") == ""
+        assert client.get("/api/state").json()["current"]["tags"] == []
+
+
+@pytest.mark.parametrize("change", ["modify", "delete", "create"])
+def test_metadata_conflict_preserves_disk_and_memory(tmp_path: Path, change: str) -> None:
+    """Отклоняет сохранение поверх изменённого, удалённого или созданного индекса."""
+    path = make_song(tmp_path, "Песня", ("bounce/1.mp3",)) / "INDEX.md"
+    with TestClient(create_app(tmp_path)) as client:
+        if change == "create":
+            path.unlink()
+        before = client.get("/api/state").json()
+        url = f"/api/metadata/{before['current']['id']}"
+        data = client.get(url).json()
+        if change == "delete":
+            path.unlink()
+            expected = None
+        else:
+            expected = "# Изменено извне\r\n".encode()
+            path.write_bytes(expected)
+        response = client.put(
+            url,
+            json=metadata_payload(data, description="Мои правки", tags={"rating": 8}),
+        )
+        assert response.status_code == 409
+        assert (path.read_bytes() if path.exists() else None) == expected
+        assert client.get("/api/state").json() == before
+
+
+@pytest.mark.parametrize(
+    "description,tags",
+    [
+        ("Описание", {"rating": 11}),
+        ("Описание", {"rating": True}),
+        ("Описание", {"rating": 2.5}),
+        ("Описание", {"genre": "unknown"}),
+        ("Описание", {"mood": ["unknown"]}),
+        ("Описание", {"other_names": ["Строка\nЕщё строка"]}),
+        ("Описание", {"unknown": "значение"}),
+        ("Описание", {"lyrics": ""}),
+        ("## Rating\n8", {}),
+        ("Описание", {"lyrics": "Куплет\n## Rating\n8"}),
+    ],
+)
+def test_metadata_rejects_invalid_values_without_writing(
+    tmp_path: Path, description: str, tags: dict
+) -> None:
+    """Отклоняет неверные типы и текст, меняющий структуру индекса при чтении."""
+    path = make_song(tmp_path, "Песня", ("bounce/1.mp3",)) / "INDEX.md"
+    with TestClient(create_app(tmp_path)) as client:
+        before = client.get("/api/state").json()
+        url = f"/api/metadata/{before['current']['id']}"
+        data = client.get(url).json()
+        response = client.put(url, json=metadata_payload(data, description=description, tags=tags))
+        assert response.status_code == 422
+        assert path.read_bytes() == b""
+        assert client.get("/api/state").json() == before
+
+
+def test_metadata_write_failure_preserves_index(tmp_path: Path) -> None:
+    """Сохраняет прежний индекс и сведения при ошибке атомарной замены файла."""
+    folder = make_song(tmp_path, "Песня", ("bounce/1.mp3",))
+    with TestClient(create_app(tmp_path)) as client:
+        before = client.get("/api/state").json()
+        url = f"/api/metadata/{before['current']['id']}"
+        data = client.get(url).json()
+        with patch("web_player.metadata.Path.replace", side_effect=PermissionError):
+            response = client.put(
+                url,
+                json=metadata_payload(data, description="Новое описание", tags={}),
+            )
+        assert response.status_code == 500
+        assert (folder / "INDEX.md").read_bytes() == b""
+        assert list(folder.glob(".INDEX-*")) == []
+        assert client.get("/api/state").json() == before
+
+
+def test_metadata_rejects_unknown_tracks_and_symlinks(tmp_path: Path) -> None:
+    """Не читает и не перезаписывает подменённый ссылкой индекс или чужой файл."""
+    folder = make_song(tmp_path / "library", "Песня", ("bounce/1.mp3",))
+    path = folder / "INDEX.md"
+    outside = tmp_path / "outside.md"
+    outside.write_text("Сохранить", encoding="utf-8")
+    with TestClient(create_app(tmp_path / "library")) as client:
+        track = client.get("/api/state").json()["current"]
+        url = f"/api/metadata/{track['id']}"
+        data = client.get(url).json()
+        update = metadata_payload(data, description="Новое описание", tags={})
+        assert client.get("/api/metadata/unknown").status_code == 404
+        assert client.put("/api/metadata/unknown", json=update).status_code == 404
+        path.unlink()
+        path.symlink_to(outside)
+        assert client.get(url).status_code == 400
+        assert client.put(url, json=update).status_code == 422
+        assert outside.read_text(encoding="utf-8") == "Сохранить"

@@ -10,10 +10,13 @@ from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from pydantic import ValidationError
 
 from core.logicx import is_file
 from web_player.library import scan_library
-from web_player.resources import PlaylistPage, QueueView
+from web_player.metadata import load_metadata, save_metadata
+from web_player.renaming import MetadataConflictError, RenameRecoveryError
+from web_player.resources import MetadataEditor, MetadataUpdate, PlaylistPage, QueueView, Track
 
 STATIC_DIR = Path(__file__).parent / "static"
 
@@ -41,6 +44,44 @@ def create_app(index_dir: Path) -> FastAPI:
     async def state() -> QueueView:
         """Возвращает состояние общей очереди."""
         return app.state.queue.view()
+
+    def metadata_track(track_id: str) -> Track:
+        """Находит известный библиотеке трек для редактирования общего индекса."""
+        track = app.state.queue.tracks.get(track_id)
+        if track is None:
+            raise HTTPException(404, "Трек не найден")
+        return track
+
+    @app.get("/api/metadata/{track_id}")
+    async def metadata(track_id: str) -> MetadataEditor:
+        """Возвращает актуальный индекс и поля формы из конфигурации тегов."""
+        track = metadata_track(track_id)
+        try:
+            return load_metadata(root, track)
+        except MetadataConflictError as error:
+            raise HTTPException(409, str(error))
+        except (ValueError, OSError) as error:
+            raise HTTPException(400, f"Не удалось прочитать индекс: {error}")
+
+    @app.put("/api/metadata/{track_id}")
+    async def update_metadata(track_id: str, update: MetadataUpdate) -> MetadataEditor:
+        """Сохраняет имя файла, описание и теги без изменения очереди и воспроизведения."""
+        track = metadata_track(track_id)
+        try:
+            return save_metadata(root, app.state.queue, track, update)
+        except MetadataConflictError as error:
+            raise HTTPException(409, str(error))
+        except ValidationError as error:
+            message = error.errors()[0]["msg"].removeprefix("Value error, ")
+            raise HTTPException(422, message)
+        except ValueError as error:
+            raise HTTPException(422, str(error))
+        except RenameRecoveryError as error:
+            raise HTTPException(500, str(error))
+        except OSError as error:
+            raise HTTPException(
+                500, "Не удалось сохранить имя файла и INDEX.md на диске"
+            ) from error
 
     @app.post("/api/next")
     async def next_track() -> QueueView:

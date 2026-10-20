@@ -3,9 +3,31 @@
 import random
 from pathlib import Path
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, StrictInt
 
 from index import Tag
+from index.resources import TagDefinition
+
+
+class MetadataUpdate(BaseModel):
+    """Описывает изменение имени, описания и тегов с проверкой версий файлов."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    revision: str
+    file_revision: str
+    filename: str
+    description: str
+    tags: dict[str, str | list[str] | StrictInt]
+
+
+class MetadataEditor(MetadataUpdate):
+    """Передаёт исходные данные индекса и конфигурацию полей редактору."""
+
+    directory: str
+    track_id: str
+    extension: str
+    definitions: dict[str, TagDefinition]
 
 
 class Track(BaseModel):

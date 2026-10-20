@@ -11,6 +11,20 @@
   let openingFile = false;
   let resumeAt = 0;
   let savedSecond = -1;
+  const editor = new window.MetadataEditor({ onChange: render, onSave: applyMetadata });
+
+  /** Обновляет сведения всех загруженных треков общей музыкальной директории. */
+  function applyMetadata(data) {
+    const tracks = [state.current, ...state.previous, ...state.upcoming];
+    for (const track of tracks) {
+      if (!track || track.directory !== data.directory) continue;
+      if (track.id === data.track_id) track.name = data.filename + data.extension;
+      track.description = data.description.trim();
+      track.tags = Object.entries(data.tags).map(([key, value]) => ({
+        name: data.definitions[key].name, type: data.definitions[key].type, value,
+      }));
+    }
+  }
 
   /** Преобразует секунды в отображаемое время. */
   function time(seconds) {
@@ -76,8 +90,11 @@
 
   /** Обновляет подсветку без пересоздания уже загруженных строк. */
   function highlightPlaylist() {
+    const tracks = [state?.current, ...(state?.previous ?? []), ...(state?.upcoming ?? [])];
+    const names = new Map(tracks.filter(Boolean).map((track) => [track.id, track.name]));
     for (const [id, button] of playlistButtons) {
-      button.disabled = busy;
+      if (names.has(id)) button.children[0].textContent = names.get(id);
+      button.disabled = busy || editor.active;
       if (id === state?.current?.id) button.setAttribute("aria-current", "true");
       else button.removeAttribute("aria-current");
     }
@@ -158,10 +175,29 @@
     element("directory").textContent = track?.directory ?? "Добавьте записи и перезапустите сервер";
     const description = element("description");
     description.textContent = track?.description ?? "";
-    element("description-section").hidden = !track?.description;
+    element("description-section").hidden = editor.active || !track?.description;
     const tags = element("tags");
     tags.replaceChildren();
-    const trackTags = track?.tags ?? [];
+    const allTags = track?.tags ?? [];
+    const lyrics = allTags.find((tag) => tag.name === "Lyrics");
+    const rating = allTags.find((tag) => tag.name === "Rating");
+    element("lyrics").textContent = lyrics?.value ?? "";
+    element("lyrics-section").hidden = editor.active || !lyrics?.value;
+    const stars = element("rating-stars");
+    stars.replaceChildren();
+    if (rating) {
+      for (let number = 1; number <= 10; number += 1) {
+        const star = document.createElement("span");
+        const filled = number <= rating.value;
+        star.className = filled ? "rating-star is-filled" : "rating-star";
+        star.textContent = filled ? "★" : "☆";
+        stars.append(star);
+      }
+    }
+    element("rating-label").textContent = rating ? `${rating.value}/10` : "";
+    element("track-rating").setAttribute("aria-label", rating ? `Оценка ${rating.value} из 10` : "Оценка не задана");
+    element("track-rating").hidden = editor.active || !rating;
+    const trackTags = allTags.filter((tag) => tag !== lyrics && tag !== rating);
     for (const tag of trackTags) {
       const term = document.createElement("dt");
       term.textContent = tag.name;
@@ -169,7 +205,7 @@
       value.textContent = Array.isArray(tag.value) ? tag.value.join(", ") : String(tag.value);
       tags.append(term, value);
     }
-    element("tags-section").hidden = !trackTags.length;
+    element("tags-section").hidden = editor.active || !trackTags.length;
     const resources = element("resources");
     resources.replaceChildren();
     const trackResources = [
@@ -184,19 +220,21 @@
       value.textContent = String(count);
       resources.append(term, value);
     }
-    element("resources-section").hidden = !trackResources.length;
+    element("resources-section").hidden = editor.active || !trackResources.length;
     element("count").textContent = state
       ? `Директории: ${state.total_directories} · Файлы: ${state.total}`
       : "";
     element("play").disabled = busy || !track;
     element("open-file").disabled = busy || !track || openingFile;
-    element("previous").disabled = busy || !state?.has_previous;
-    element("next").disabled = busy || !state?.has_next;
-    element("shuffle").disabled = busy || !state?.has_next;
+    element("edit-metadata").disabled = busy || !track;
+    element("previous").disabled = busy || editor.active || !state?.has_previous;
+    element("next").disabled = busy || editor.active || !state?.has_next;
+    element("shuffle").disabled = busy || editor.active || !state?.has_next;
     element("previous-directory").hidden = Boolean(state?.shuffled);
-    element("previous-directory").disabled = busy || !state?.has_previous_directory;
+    element("previous-directory").disabled = busy || editor.active || !state?.has_previous_directory;
     element("next-directory").hidden = Boolean(state?.shuffled);
-    element("next-directory").disabled = busy || !state?.has_next_directory;
+    element("next-directory").disabled = busy || editor.active || !state?.has_next_directory;
+    editor.render();
     highlightPlaylist();
     updateMediaSession();
   }
@@ -276,6 +314,7 @@
   /** Начинает воспроизведение с учётом ограничений браузера. */
   async function play() {
     try {
+      if (audio.ended) audio.currentTime = 0;
       await audio.play();
     } catch (error) {
       if (error.name === "NotAllowedError") {
@@ -288,7 +327,7 @@
 
   /** Выполняет переход или перемешивание и применяет состояние сервера. */
   async function change(action, autoplay = !audio.paused, scrollPlaylist = true) {
-    if (busy) return;
+    if (busy || editor.active) return;
     busy = true;
     render();
     try {
@@ -332,6 +371,9 @@
   }
 
   element("open-file").addEventListener("click", () => void openFile());
+  element("edit-metadata").addEventListener("click", () => {
+    if (!busy && state?.current) void editor.open(state.current);
+  });
   element("play").addEventListener("click", () => {
     element("status").textContent = "";
     if (audio.paused) void play();
@@ -413,7 +455,13 @@
     save();
     updateMediaSession();
   });
-  audio.addEventListener("ended", () => void change("next", true, false));
+  audio.addEventListener("ended", () => {
+    if (editor.active) {
+      element("status").textContent = "Трек закончился. Завершите редактирование и нажмите Play или выберите другой трек.";
+      return;
+    }
+    void change("next", true, false);
+  });
   audio.addEventListener("error", () => {
     element("status").textContent = `Не удалось воспроизвести «${state?.current?.name}».`;
     if (state?.has_next) void change("next", true, false);

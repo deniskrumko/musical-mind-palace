@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Музыкальный плеер</title>
   <link rel="stylesheet" href="{{ url_for('static', path='/css/player.css') }}">
+  <script defer src="{{ url_for('static', path='/js/metadata-editor.js') }}"></script>
   <script defer src="{{ url_for('static', path='/js/player.js') }}"></script>
 </head>
 <body>
@@ -12,12 +13,30 @@
     <section class="player" aria-label="Плеер">
       <article id="track-info" class="track-info" aria-label="Описание текущего файла">
         <header class="track-heading">
+          <div class="metadata-toolbar">
+            <button id="edit-metadata" type="button" aria-label="Редактировать описание и теги" title="Редактировать описание и теги" disabled><span class="control-icon icon-pencil" aria-hidden="true"></span></button>
+            <div id="metadata-actions" hidden>
+              <button id="save-metadata" type="submit" form="metadata-form">Сохранить</button>
+              <button id="cancel-metadata" type="button">Отменить</button>
+            </div>
+          </div>
           <h1 id="name">Подождите</h1>
           <h2 id="directory" class="muted">Загрузка библиотеки…</h2>
+          <div id="track-rating" class="track-rating" role="img" hidden>
+            <span id="rating-stars" class="rating-stars" aria-hidden="true"></span>
+            <span id="rating-label" class="rating-label" aria-hidden="true"></span>
+          </div>
         </header>
+        <form id="metadata-form" aria-label="Редактирование описания и тегов" hidden>
+          <fieldset id="metadata-fields"></fieldset>
+        </form>
         <section id="description-section" class="track-section" hidden>
           <h3>Описание</h3>
           <p id="description" class="track-description"></p>
+        </section>
+        <section id="lyrics-section" class="track-section" hidden>
+          <h3>Текст песни</h3>
+          <p id="lyrics" class="track-description"></p>
         </section>
         <section id="tags-section" class="track-section" hidden>
           <h3>Теги</h3>
