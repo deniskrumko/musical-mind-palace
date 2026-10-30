@@ -1,5 +1,6 @@
 """HTTP-интерфейс музыкального плеера и потоковая выдача аудио."""
 
+import logging
 import subprocess
 import sys
 from collections.abc import AsyncGenerator
@@ -13,12 +14,22 @@ from fastapi.templating import Jinja2Templates
 from pydantic import ValidationError
 
 from core.logicx import is_file
+from web_player.filters import filter_options, filtered_page, matching_tracks
 from web_player.library import scan_library
 from web_player.metadata import load_metadata, save_metadata
 from web_player.renaming import MetadataConflictError, RenameRecoveryError
-from web_player.resources import MetadataEditor, MetadataUpdate, PlaylistPage, QueueView, Track
+from web_player.resources import (
+    MetadataEditor,
+    MetadataUpdate,
+    PlaylistFilter,
+    PlaylistPage,
+    QueueView,
+    Track,
+    TrackBatch,
+)
 
 STATIC_DIR = Path(__file__).parent / "static"
+logger = logging.getLogger(__name__)
 
 
 def create_app(index_dir: Path) -> FastAPI:
@@ -93,6 +104,38 @@ def create_app(index_dir: Path) -> FastAPI:
         """Отдаёт следующие сто строк плейлиста начиная с указанного смещения."""
         return app.state.queue.playlist_page(offset)
 
+    @app.get("/api/playlist/filters")
+    async def playlist_filters() -> list[dict[str, object]]:
+        """Возвращает доступные для фильтрации значения тегов."""
+        return filter_options(app.state.queue)
+
+    @app.post("/api/playlist/filter")
+    async def filter_playlist(criteria: PlaylistFilter) -> PlaylistPage:
+        """Ищет треки в плейлисте по условиям отдельного браузера."""
+        return filtered_page(app.state.queue, criteria)
+
+    @app.get("/api/library")
+    async def library() -> dict:
+        """Возвращает компактный порядок всей библиотеки."""
+        queue = app.state.queue
+        return {
+            "ids": list(queue.tracks),
+            "total_directories": queue.total_directories,
+        }
+
+    @app.post("/api/library/search")
+    async def search_library(criteria: PlaylistFilter) -> list[tuple[str, str]]:
+        """Возвращает идентификаторы и директории всех подходящих треков."""
+        return [(track.id, track.directory) for track in matching_tracks(app.state.queue, criteria)]
+
+    @app.post("/api/library/tracks")
+    async def library_tracks(batch: TrackBatch) -> list[Track]:
+        """Возвращает сведения о порции треков в запрошенном порядке."""
+        queue = app.state.queue
+        if any(track_id not in queue.tracks for track_id in batch.ids):
+            raise HTTPException(404, "Трек не найден")
+        return [queue.tracks[track_id] for track_id in batch.ids]
+
     @app.post("/api/previous")
     async def previous_track() -> QueueView:
         """Переводит очередь к предыдущему прослушанному треку."""
@@ -146,6 +189,17 @@ def create_app(index_dir: Path) -> FastAPI:
     @app.get("/audio/{track_id}")
     async def audio(track_id: str) -> FileResponse:
         """Отдаёт известный аудиофайл с поддержкой диапазонов для перемотки."""
-        return FileResponse(audio_path(track_id), content_disposition_type="inline")
+        try:
+            path = audio_path(track_id)
+        except HTTPException as error:
+            track = app.state.queue.tracks.get(track_id)
+            logger.warning(
+                "Не удалось отдать аудио: id=%s, путь=%s, причина=%s",
+                track_id,
+                track.path if track else None,
+                error.detail,
+            )
+            raise
+        return FileResponse(path, content_disposition_type="inline")
 
     return app

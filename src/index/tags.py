@@ -22,6 +22,8 @@ class TagDefinition(BaseModel):
     display_name: str
     type: TagType
     choices: tuple[str, ...] | None = None
+    use_in_filters: StrictBool = True
+    use_in_text_search: StrictBool = False
 
     @model_validator(mode="before")
     @classmethod

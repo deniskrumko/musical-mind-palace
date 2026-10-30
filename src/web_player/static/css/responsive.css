@@ -106,3 +106,11 @@
   .track-tags { grid-template-columns: 1fr; gap: 2px; }
   .track-tags dd { margin-bottom: 7px; }
 }
+
+@media (max-width: 400px) {
+  .control-left-block { gap: 3px; }
+  .control-left-block button { width: 30px; height: 36px; }
+  .control-left-block .primary { width: 34px; height: 36px; }
+  .control-right-block { gap: 4px; }
+  .control-right-block button { width: 32px; }
+}

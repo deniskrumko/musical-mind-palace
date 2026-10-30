@@ -47,6 +47,12 @@ class Element {
   replaceChildren() { this.children = []; }
   /** Добавляет дочерние элементы. */
   append(...children) { for (const child of children) { child.parent = this; this.children.push(child); } }
+  /** Находит флажки фильтров среди дочерних элементов. */
+  querySelectorAll(selector) {
+    const descendants = node => node.children.flatMap(child => [child, ...descendants(child)]);
+    return descendants(this).filter(child => child.tagName === "input" && child.type === "checkbox"
+      && (!selector.includes(":checked") || child.checked));
+  }
   /** Удаляет строку из родительского списка. */
   remove() { this.parent.children = this.parent.children.filter(child => child !== this); }
   /** Отмечает перенос фокуса в поле редактора. */
@@ -79,7 +85,7 @@ class Element {
 function settle() { return new Promise(resolve => setImmediate(resolve)); }
 
 /** Создаёт изолированную страницу с подготовленными ответами сервера. */
-async function page(withMedia = true, unsupportedActions = false, trackCount = 5, currentIndex = 0) {
+async function page(withMedia = true, unsupportedActions = false, trackCount = 5, currentIndex = 0, options = {}) {
   const tracks = [
     { id: "a1", name: "1.mp3", directory: "А" },
     { id: "a2", name: "<img src=x>.mp3", directory: "А" },
@@ -146,14 +152,28 @@ async function page(withMedia = true, unsupportedActions = false, trackCount = 5
     },
     albums: {},
   }};
+  const storage = options.storage ?? {};
+  const errors = [];
+  const location = {pathname: "/", search: options.search ?? ""};
+  const history = {replaceState(_state, _title, url) { location.search = url.includes("?") ? `?${url.split("?")[1]}` : ""; }};
   const context = vm.createContext({
+    console: { error: (...args) => errors.push(args) },
+    URLSearchParams,
     navigator: withMedia ? { mediaSession: media } : {},
     MediaMetadata: class { constructor(data) { Object.assign(this, data); } },
     document: { getElementById: get, createElement: tag => new Element(tag), addEventListener() {} },
-    window: { addEventListener(type, handler) { (windowHandlers[type] ??= []).push(handler); }, matchMedia: () => layout },
-    localStorage: { getItem: () => null, setItem() {} },
+    window: { location, history, addEventListener(type, handler) { (windowHandlers[type] ??= []).push(handler); }, matchMedia: () => layout },
+    localStorage: { getItem: key => storage[key] ?? null, setItem(key, value) { storage[key] = value; } },
     fetch: async (url, options) => {
       calls.push([url, options.method ?? "GET"]);
+      if (url === "/api/library") return {ok: true, json: async () => ({ids: tracks.map(track => track.id), total_directories: 3})};
+      if (url === "/api/library/search") {
+        const {query} = JSON.parse(options.body);
+        const text = query.trim().toLowerCase();
+        const directories = new Set(tracks.filter(track => track.name.toLowerCase().includes(text) || track.directory.toLowerCase().includes(text)).map(track => track.directory));
+        return {ok: true, json: async () => tracks.filter(track => directories.has(track.directory)).map(track => [track.id, track.directory])};
+      }
+      if (url === "/api/library/tracks") return {ok: true, json: async () => JSON.parse(options.body).ids.map(id => structuredClone(tracks.find(track => track.id === id)))};
       if (url.startsWith("/api/metadata/")) {
         if (options.method === "PUT") {
           const update = JSON.parse(options.body);
@@ -163,6 +183,13 @@ async function page(withMedia = true, unsupportedActions = false, trackCount = 5
           a1.name = update.filename + metadataServer.data.extension;
         }
         return {ok: true, json: async () => structuredClone(metadataServer.data)};
+      }
+      if (url === "/api/playlist/filters") {
+        return {ok: true, json: async () => [{key: "rating", name: "Оценка", type: "star_rating", values: {"3": "3", "7": "7"}}]};
+      }
+      if (url === "/api/playlist/filter") {
+        const { offset } = JSON.parse(options.body);
+        return {ok: true, json: async () => ({tracks: order.slice(offset, offset + 100), offset, total: order.length, revision: order[3]?.id === "c1" ? 1 : 0})};
       }
       if (url.startsWith("/api/playlist?")) {
         const offset = Number(url.split("=")[1]);
@@ -180,7 +207,8 @@ async function page(withMedia = true, unsupportedActions = false, trackCount = 5
     vm.runInContext(source, context);
   }
   await settle();
-  return { get, handlers, calls, media, layout, windowHandlers, metadataServer };
+  await settle();
+  return { get, handlers, calls, media, layout, windowHandlers, metadataServer, storage, location, errors };
 }
 
 /** Проверяет черновик, поля редактора и остановку переходов до завершения правок. */
@@ -319,9 +347,100 @@ async function testMetadataEditor() {
   assert.equal(get("rating-label").textContent, "");
 }
 
+/** Проверяет локальную очередь, восстановление и ссылку на отфильтрованную выдачу. */
+async function testLocalQueue() {
+  const first = await page();
+  const {get, location, storage} = first;
+  const audio = get("audio");
+  await audio.play();
+  get("playlist-filters").hidden = true;
+  get("toggle-filters").emit("click");
+  await settle();
+  get("filter-query").value = "Б";
+  get("playlist-filters").emit("submit");
+  await settle();
+  assert.equal(audio.src, "/audio/a1");
+  assert.equal(audio.paused, false);
+  assert.equal(get("next").disabled, true);
+  assert.equal(get("previous").disabled, true);
+  assert.equal(get("playlist-tracks").children.length, 2);
+  audio.emit("ended");
+  await settle();
+  assert.equal(audio.src, "/audio/a1");
+  get("playlist-tracks").children[0].children[0].emit("click");
+  await settle();
+  assert.equal(audio.src, "/audio/b1");
+  audio.emit("ended");
+  await settle();
+  assert.equal(audio.src, "/audio/b2");
+  audio.emit("ended");
+  await settle();
+  assert.equal(audio.src, "/audio/b2");
+  get("previous").emit("click");
+  await settle();
+  assert.equal(audio.src, "/audio/b1");
+  get("next").emit("click");
+  await settle();
+  assert.equal(audio.src, "/audio/b2");
+  get("shuffle").emit("click");
+  await settle();
+  const queue = JSON.parse(storage["musical-palace-queue-v2"]);
+  assert.equal(queue.shuffled, true);
+  assert.equal(queue.queue[0][0], "b2");
+  assert.equal(queue.queue[1][0], "b1");
+  assert.equal(audio.src, "/audio/b2");
+  assert.equal(get("previous").disabled, true);
+  assert.equal(get("next").disabled, false);
+  const restored = await page(true, false, 5, 0, {storage, search: location.search});
+  assert.equal(restored.get("audio").src, "/audio/b2");
+  assert.equal(restored.get("audio").paused, true);
+  assert.equal(restored.get("next-directory").hidden, true);
+  assert.deepEqual(JSON.parse(storage["musical-palace-queue-v2"]).queue, queue.queue);
+  const shared = await page(true, false, 5, 0, {search: location.search});
+  assert.equal(shared.get("audio").src, "/audio/b2");
+  assert.equal(shared.get("next-directory").hidden, false);
+  shared.get("audio").error = {code: 4, message: "Формат не поддерживается"};
+  shared.get("audio").emit("error");
+  await settle();
+  assert.equal(shared.get("audio").src, "/audio/b2");
+  assert.ok(shared.get("status").textContent.includes("Не удалось воспроизвести"));
+  assert.equal(shared.errors[0][1].code, 4);
+  assert.equal(shared.errors[0][1].message, "Формат не поддерживается");
+  assert.equal(shared.errors[0][1].url, "/audio/b2");
+  const scrollsBeforeReset = restored.get("playlist").scrollCalls ?? 0;
+  restored.get("reset-playlist").emit("click");
+  await settle();
+  assert.equal(restored.get("playlist").scrollCalls, scrollsBeforeReset + 1);
+  assert.equal(restored.get("audio").src, "/audio/b2");
+  assert.equal(restored.get("playlist-tracks").children.length, 5);
+  assert.equal(restored.get("next-directory").hidden, false);
+  restored.layout.matches = true;
+  restored.layout.onChange();
+  const scrollsBeforeMobileReset = restored.get("playlist").scrollCalls;
+  restored.get("reset-playlist").emit("click");
+  await settle();
+  assert.equal(restored.get("playlist").scrollCalls, scrollsBeforeMobileReset);
+  restored.get("toggle-playlist").emit("click");
+  assert.equal(restored.get("playlist").scrollCalls, scrollsBeforeMobileReset + 1);
+  assert.equal(new URLSearchParams(location.search).get("t"), "3");
+  assert.equal(new URLSearchParams(location.search).has("s"), false);
+  for (const number of ["99", "rn", "-1", ""]) {
+    const invalid = await page(true, false, 5, 0, {search: `?t=${number}&q=Б`});
+    assert.equal(invalid.get("status").textContent, `Трек с номером «${number}» не найден.`);
+    assert.equal(invalid.get("audio").src, undefined);
+    assert.equal(new URLSearchParams(invalid.location.search).get("t"), number);
+    invalid.get("playlist-tracks").children[0].children[0].emit("click");
+    await settle();
+    assert.equal(invalid.get("status").textContent, "");
+  }
+  const decimal = await page(true, false, 205, 0, {search: "?t=100"});
+  assert.equal(decimal.get("audio").src, "/audio/t100");
+}
+
 /** Проверяет команды системного плеера, группировку и сохранение паузы. */
 async function main() {
   await testMetadataEditor();
+  await testLocalQueue();
   const { get, handlers, calls, media, layout } = await page();
   assert.equal(get("playlist")["aria-hidden"], "false");
   layout.matches = true;
@@ -358,6 +477,14 @@ async function main() {
   assert.equal(handlers.seekforward, null);
   assert.equal(get("next-directory").hidden, false);
   assert.equal(get("next-directory").disabled, false);
+  get("playlist").scrollTop = 200;
+  get("playlist").emit("scroll");
+  assert.equal(get("playlist-to-top").hidden, false);
+  get("playlist-to-top").emit("click");
+  assert.equal(get("playlist").scrollTop, 0);
+  get("playlist").emit("scroll");
+  assert.equal(get("playlist-to-top").hidden, true);
+
   const list = get("playlist-tracks");
   assert.equal(list.children.length, 5);
   const firstRow = list.children[0];
@@ -368,7 +495,7 @@ async function main() {
   assert.equal(trackButton.children[1].textContent, "А");
   trackButton.emit("click");
   await settle();
-  assert.deepEqual(calls.filter(call => call[1] === "POST").at(-1), ["/api/select/a2", "POST"]);
+  assert.equal(calls.some(call => call[0].startsWith("/api/select/")), false);
   assert.equal(audio.src, "/audio/a2");
   assert.equal(audio.paused, false);
   assert.equal(list.children[0], firstRow);
@@ -393,23 +520,23 @@ async function main() {
   assert.equal(media.playbackState, "playing");
   handlers.nexttrack();
   await settle();
-  assert.deepEqual(calls.at(-1), ["/api/next", "POST"]);
+
   assert.equal(audio.src, "/audio/a2");
   assert.equal(audio.paused, false);
   assert.equal(media.metadata.title, "<img src=x>.mp3");
   handlers.previoustrack();
   await settle();
-  assert.deepEqual(calls.at(-1), ["/api/previous", "POST"]);
+
   assert.equal(audio.src, "/audio/a1");
   handlers.pause();
   get("next-directory").emit("click");
   await settle();
-  assert.deepEqual(calls.at(-1), ["/api/next-directory", "POST"]);
+
   assert.equal(audio.src, "/audio/b1");
   assert.equal(audio.paused, true);
   get("previous-directory").emit("click");
   await settle();
-  assert.deepEqual(calls.at(-1), ["/api/previous-directory", "POST"]);
+
   assert.equal(audio.src, "/audio/a1");
   handlers.play();
   await settle();
@@ -420,6 +547,44 @@ async function main() {
   assert.equal(audio.paused, false);
   assert.equal(get("playlist-tracks").children.length, 5);
   assert.equal(typeof handlers.nexttrack, "function");
+  get("playlist-filters").hidden = true;
+  get("toggle-filters").emit("click");
+  await settle();
+  assert.equal(get("filters-panel").classList.contains("is-active"), true);
+  assert.equal(get("filter-query").hidden, false);
+  const ratingOptions = get("filter-fields").children[0].children;
+  assert.equal(ratingOptions[1].children[1].textContent, "Не указано");
+  const ratingScale = ratingOptions[2];
+  assert.equal(ratingScale.children.filter(child => child.tagName === "button").length, 10);
+  ratingScale.children[2].emit("mouseenter");
+  assert.equal(ratingScale.children[10].textContent, "3/10");
+  ratingScale.emit("mouseleave");
+  assert.equal(ratingScale.children[10].textContent, "—/10");
+  ratingScale.children[2].emit("click");
+  ratingScale.children[6].emit("click");
+  assert.equal(ratingScale.children[10].textContent, "7/10");
+  assert.equal(ratingScale.children[6]["aria-pressed"], "true");
+  ratingOptions[1].children[0].checked = true;
+  get("filter-query").value = "1.mp3";
+  get("playlist-filters").emit("submit");
+  await settle();
+  assert.equal(get("filter-chips-closed").children.length, 3);
+  assert.equal(get("filter-query").hidden, true);
+  assert.equal(get("filters-panel").classList.contains("is-active"), true);
+  assert.equal(get("filter-chips-closed").children[1].children[0].textContent, "Оценка: Не указано");
+  get("filter-chips-closed").children[1].emit("click");
+  await settle();
+  assert.equal(get("filter-chips-closed").children.length, 2);
+  assert.equal(get("filter-chips-closed").children[1].children[0].textContent, "Оценка: 7/10");
+  assert.equal(ratingOptions[1].children[0].checked, false);
+  assert.ok(calls.some(call => call[0] === "/api/library/search"));
+  get("filter-chips-closed").children[0].emit("click");
+  await settle();
+  assert.equal(get("filter-query").value, "");
+  get("filter-chips-closed").children[0].emit("click");
+  await settle();
+  assert.equal(ratingScale.children[10].textContent, "—/10");
+  assert.equal(get("filters-panel").classList.contains("is-active"), false);
   const fallback = await page(false);
   fallback.get("next-directory").emit("click");
   await settle();
@@ -437,11 +602,6 @@ async function main() {
   paged.get("playlist").emit("scroll");
   await settle();
   assert.equal(paged.get("playlist-tracks").children.length, 205);
-  const restored = await page(true, false, 205, 204);
-  await settle();
-  assert.equal(restored.get("playlist-tracks").children.length, 205);
-  assert.equal(restored.get("playlist-tracks").children[204].children[0]["aria-current"], "true");
-  assert.ok(restored.get("playlist").scrollCalls > 0);
   const requestCount = paged.calls.length;
   paged.get("playlist").emit("scroll");
   await settle();

@@ -64,6 +64,20 @@ class QueueView(BaseModel):
     playlist_revision: int
 
 
+class PlaylistFilter(BaseModel):
+    """Описывает локальные условия поиска и смещение страницы."""
+
+    query: str = ""
+    tags: dict[str, list[str | None]] = Field(default_factory=dict)
+    offset: int = Field(default=0, ge=0)
+
+
+class TrackBatch(BaseModel):
+    """Описывает запрос сведений о выбранных треках."""
+
+    ids: list[str] = Field(max_length=100)
+
+
 class PlaylistPage(BaseModel):
     """Представляет страницу единого плейлиста в порядке воспроизведения."""
 

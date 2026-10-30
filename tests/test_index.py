@@ -187,3 +187,21 @@ def test_config_is_read_once_per_process(tmp_path: Path, monkeypatch: pytest.Mon
 def test_missing_index(tmp_path: Path) -> None:
     """Возвращает пустой индекс для отсутствующего файла."""
     assert Index.load(tmp_path / "INDEX.md") == Index()
+
+
+def test_tag_filter_configuration_defaults_and_override():
+    """Включает фильтрацию по умолчанию и допускает явное отключение."""
+    definitions = parse_tag_config(
+        '[tag.default]\nname = "Default"\ntype = "string"\n'
+        '[tag.hidden]\nname = "Hidden"\ntype = "text"\nuse_in_filters = false\n'
+    )
+    assert definitions["default"].use_in_text_search is False
+    assert definitions["default"].use_in_filters is True
+    assert definitions["hidden"].use_in_filters is False
+    enabled = parse_tag_config(
+        '[tag.enabled]\nname = "Enabled"\ntype = "string"\nuse_in_text_search = true'
+    )
+    assert enabled["enabled"].use_in_text_search is True
+    for field in ("use_in_filters", "use_in_text_search"):
+        with pytest.raises(ValueError):
+            parse_tag_config(f'[tag.invalid]\nname = "Invalid"\ntype = "string"\n{field} = "false"')

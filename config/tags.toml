@@ -2,11 +2,15 @@
 name = "Original folder"
 display_name = "Исходная директория"
 type = "string"
+use_in_filters = false
+use_in_text_search = true
 
 [tag.other_names]
 name = "Other names"
 display_name = "Другие названия"
 type = "list"
+use_in_filters = false
+use_in_text_search = true
 
 [tag.album]
 name = "Album"
@@ -24,31 +28,12 @@ choices = [
     "polystra",
 ]
 
-[tag.specialty]
-name = "Specialty"
-display_name = "Особенности"
-type = "multi_choice"
-choices = [
-    "async",
-    "bass",
-    "ukulele",
-]
-
-[tag.sounds_like]
-name = "Sounds like"
-display_name = "Похожа на"
-type = "multi_choice"
-choices = [
-    "Metallica",
-    "TOOL",
-    "Nirvana",
-    "Stratovarius",
-]
-
 [tag.lyrics]
 name = "Lyrics"
 display_name = "Текст песни"
 type = "text"
+use_in_filters = false
+use_in_text_search = true
 
 [tag.has_vocals]
 name = "Has vocals"
@@ -72,14 +57,17 @@ name = "Mood"
 display_name = "Настроение"
 type = "multi_choice"
 choices = [
-    "sad",
-    "depressing",
-    "kind",
-    "joy",
-    "quirky",
-    "arabic",
     "angry",
+    "arabic",
+    "depressing",
+    "epic",
     "funky",
+    "joy",
+    "kind",
+    "normal",
+    "power",
+    "quirky",
+    "sad",
 ]
 
 [tag.speed]
@@ -89,6 +77,18 @@ type = "single_choice"
 choices = [
     "slow",
     "fast",
+]
+
+[tag.specialty]
+name = "Specialty"
+display_name = "Особенности"
+type = "multi_choice"
+choices = [
+    "async",
+    "bass",
+    "ukulele",
+    "metallica-like",
+    "tool-like",
 ]
 
 [tag.rating]

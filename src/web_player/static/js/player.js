@@ -30,6 +30,9 @@
         };
       });
     }
+    trackCache.clear();
+    trackCache.set(state.current.id, state.current);
+    void rebuildQueue({ preserveShuffle: true });
   }
 
   /** Преобразует секунды в отображаемое время. */
@@ -64,22 +67,120 @@
     } catch { return 0; }
   }
 
-  /** Запрашивает состояние серверной очереди. */
-  async function request(action = "state") {
-    const response = await fetch(`/api/${action}`, {
-      method: action === "state" ? "GET" : "POST",
-      cache: "no-store",
-    });
-    if (!response.ok) throw new Error("Сервер недоступен. Повторите действие.");
-    return response.json();
-  }
-
   const playlistButtons = new Map();
+  const filterStorageKey = "musical-palace-filters";
+  const queueStorageKey = "musical-palace-queue-v2";
+  let filters = { query: "", tags: {} };
+  let library = null;
+  let queue = [];
+  let shuffled = false;
+  let queueGeneration = 0;
+  let queueLoading = false;
+  let pendingAutoAdvance = false;
+  let trackCache = new Map();
+  let filterDefinitions = [];
   let playlistOffset = 0;
-  let playlistRevision = null;
   let playlistTask = null;
   let playlistGeneration = 0;
   let playlistInitialScrollPending = true;
+
+  /** Обращается к библиотеке без изменения состояния сервера. */
+  async function api(path, body) {
+    const options = body === undefined ? { cache: "no-store" } : {
+      method: "POST", cache: "no-store", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    };
+    const response = await fetch(`/api/library${path}`, options);
+    if (!response.ok) throw new Error("Не удалось загрузить библиотеку. Повторите попытку.");
+    return response.json();
+  }
+
+  /** Вычисляет доступные переходы только по локальной выдаче. */
+  function updateNavigation() {
+    const index = queue.findIndex((item) => item[0] === state.current?.id);
+    state.current_index = index;
+    state.has_previous = index > 0;
+    state.has_next = index >= 0 && index < queue.length - 1;
+    const directory = index >= 0 ? queue[index][1] : null;
+    state.has_previous_directory = index >= 0 && queue.slice(0, index).some((item) => item[1] !== directory);
+    state.has_next_directory = index >= 0 && queue.slice(index + 1).some((item) => item[1] !== directory);
+    state.shuffled = shuffled;
+  }
+
+  let invalidTrackNumber = null;
+
+  /** Сохраняет локальную очередь и обновляет адрес для передачи трека и фильтров. */
+  function saveQueue() {
+    if (!library || !state || (!state.current && invalidTrackNumber !== null)) return;
+    invalidTrackNumber = null;
+    try {
+      localStorage.setItem(queueStorageKey, JSON.stringify({ filters, shuffled, queue, current: state.current?.id ?? null }));
+      localStorage.setItem(filterStorageKey, JSON.stringify(filters));
+    } catch { /* Работа плеера не зависит от доступности хранилища. */ }
+    try {
+      const params = new URLSearchParams();
+      if (state.current) params.set("t", String(library.ids.indexOf(state.current.id)));
+      if (filters.query.trim()) params.set("q", filters.query);
+      if (Object.keys(filters.tags).length) params.set("f", JSON.stringify(filters.tags));
+      window.history.replaceState(null, "", `${window.location.pathname}?${params}`);
+    } catch { /* Адрес может быть недоступен в ограниченном окружении. */ }
+  }
+
+  /** Запрашивает сведения о выбранных треках. */
+  async function fetchTracks(ids) {
+    if (!ids.length) return [];
+    const tracks = await api("/tracks", { ids });
+    for (const track of tracks) trackCache.set(track.id, track);
+    return tracks;
+  }
+
+  /** Пересчитывает локальный порядок по текущим условиям библиотеки. */
+  async function rebuildQueue({ preserveShuffle = false, restored = null, scrollCurrent = false } = {}) {
+    const generation = ++queueGeneration;
+    let loaded = false;
+    queueLoading = true;
+    render();
+    try {
+      const matches = await api("/search", { ...filters, offset: 0 });
+      if (generation !== queueGeneration) return;
+      const old = restored ?? (preserveShuffle && shuffled ? queue : null);
+      const byId = new Map(matches.map((item) => [item[0], item]));
+      if (old) {
+        queue = old.filter((item) => byId.has(item[0])).map((item) => byId.get(item[0]));
+        const included = new Set(queue.map((item) => item[0]));
+        queue.push(...matches.filter((item) => !included.has(item[0])));
+        shuffled = true;
+      } else {
+        queue = matches;
+        shuffled = false;
+      }
+      updateNavigation();
+      loaded = true;
+      saveQueue();
+      playlistGeneration += 1;
+      playlistTask = null;
+      playlistOffset = 0;
+      playlistButtons.clear();
+      element("playlist-tracks").replaceChildren();
+      if (scrollCurrent) playlistInitialScrollPending = true;
+      await syncPlaylist(scrollCurrent);
+    } catch (error) {
+      if (generation === queueGeneration) {
+        queue = [];
+        updateNavigation();
+        element("playlist-status").textContent = error.message;
+      }
+    } finally {
+      if (generation === queueGeneration) {
+        queueLoading = false;
+        render();
+        if (pendingAutoAdvance) {
+          pendingAutoAdvance = false;
+          if (loaded && audio.ended && !editor.active && state.has_next) void change("next", true, false);
+        }
+      }
+    }
+  }
 
   /** Прокручивает только панель плейлиста к текущей песне. */
   function scrollToCurrent() {
@@ -96,33 +197,29 @@
 
   /** Обновляет подсветку без пересоздания уже загруженных строк. */
   function highlightPlaylist() {
-    const tracks = [state?.current, ...(state?.previous ?? []), ...(state?.upcoming ?? [])];
+    const tracks = [state?.current];
     const names = new Map(tracks.filter(Boolean).map((track) => [track.id, track.name]));
     for (const [id, button] of playlistButtons) {
       if (names.has(id)) button.children[0].textContent = names.get(id);
-      button.disabled = busy || editor.active;
+      button.disabled = busy || queueLoading || editor.active;
       if (id === state?.current?.id) button.setAttribute("aria-current", "true");
       else button.removeAttribute("aria-current");
     }
   }
 
-  /** Загружает очередные сто строк и добавляет их в конец ленты. */
+  /** Загружает сведения очередной сотни треков локального порядка. */
   function loadMoreTracks() {
     if (playlistTask) return playlistTask;
-    if (!state || playlistOffset >= state.playlist_total) return Promise.resolve(false);
+    if (!state || playlistOffset >= queue.length) return Promise.resolve(false);
     const generation = playlistGeneration;
+    const ids = queue.slice(playlistOffset, playlistOffset + 100).map((item) => item[0]);
     element("playlist-more").hidden = true;
     element("playlist-status").textContent = "Загрузка…";
     playlistTask = (async () => {
       try {
-        const response = await fetch(`/api/playlist?offset=${playlistOffset}`, { cache: "no-store" });
-        if (!response.ok) throw new Error("Не удалось загрузить плейлист. Повторите попытку.");
-        const page = await response.json();
+        const tracks = await fetchTracks(ids);
         if (generation !== playlistGeneration) return false;
-        if (page.revision !== state.playlist_revision) {
-          throw new Error("Состав плейлиста изменился. Обновите страницу.");
-        }
-        for (const track of page.tracks) {
+        for (const track of tracks) {
           const item = document.createElement("li");
           const button = document.createElement("button");
           button.className = "playlist-track";
@@ -133,15 +230,15 @@
           directory.className = "track-directory";
           directory.textContent = track.directory;
           button.append(filename, directory);
-          button.addEventListener("click", () => void change(`select/${encodeURIComponent(track.id)}`, true, false));
+          button.addEventListener("click", () => void selectTrack(track.id, true, false));
           item.append(button);
           element("playlist-tracks").append(item);
           playlistButtons.set(track.id, button);
         }
-        playlistOffset = page.offset + page.tracks.length;
+        playlistOffset += tracks.length;
         element("playlist-status").textContent = "";
         highlightPlaylist();
-        return page.tracks.length > 0;
+        return tracks.length > 0;
       } catch (error) {
         if (generation === playlistGeneration) {
           element("playlist-status").textContent = error.message;
@@ -155,21 +252,13 @@
     return playlistTask;
   }
 
-  /** Догружает ленту до текущего файла, сохраняя все предыдущие строки. */
+  /** Догружает список до текущего трека, если он входит в выдачу. */
   async function syncPlaylist(scrollCurrent = true) {
-    if (playlistRevision !== state.playlist_revision) {
-      playlistGeneration += 1;
-      playlistTask = null;
-      playlistRevision = state.playlist_revision;
-      playlistOffset = 0;
-      playlistButtons.clear();
-      element("playlist-tracks").replaceChildren();
-    }
-    const target = Math.max(1, (state.current_index ?? 0) + 1);
-    while (playlistOffset < target && playlistOffset < state.playlist_total) {
+    const target = Math.max(1, state.current_index + 1);
+    while (playlistOffset < target && playlistOffset < queue.length) {
       if (!await loadMoreTracks()) break;
     }
-    if (!state.playlist_total) element("playlist-status").textContent = "Нет треков";
+    if (!queue.length) element("playlist-status").textContent = "Ничего не найдено";
     highlightPlaylist();
     if (scrollCurrent && scrollToCurrent()) playlistInitialScrollPending = false;
   }
@@ -177,8 +266,8 @@
   /** Обновляет сведения о треке, кнопки и окно очереди. */
   function render() {
     const track = state?.current;
-    element("name").textContent = track?.name ?? "В библиотеке нет музыки";
-    element("directory").textContent = track?.directory ?? "Добавьте записи и перезапустите сервер";
+    element("name").textContent = track?.name ?? (invalidTrackNumber !== null ? "Трек не найден" : "В библиотеке нет музыки");
+    element("directory").textContent = track?.directory ?? (invalidTrackNumber !== null ? "Выберите трек из списка" : "Добавьте записи и перезапустите сервер");
     const description = element("description");
     description.textContent = track?.description ?? "";
     element("description-section").hidden = editor.active || !track?.description;
@@ -235,13 +324,13 @@
     element("play").disabled = busy || !track;
     element("open-file").disabled = busy || !track || openingFile;
     element("edit-metadata").disabled = busy || !track;
-    element("previous").disabled = busy || editor.active || !state?.has_previous;
-    element("next").disabled = busy || editor.active || !state?.has_next;
-    element("shuffle").disabled = busy || editor.active || !state?.has_next;
+    element("previous").disabled = busy || queueLoading || editor.active || !state?.has_previous;
+    element("next").disabled = busy || queueLoading || editor.active || !state?.has_next;
+    element("shuffle").disabled = busy || queueLoading || editor.active || queue.length < 2;
     element("previous-directory").hidden = Boolean(state?.shuffled);
-    element("previous-directory").disabled = busy || editor.active || !state?.has_previous_directory;
+    element("previous-directory").disabled = busy || queueLoading || editor.active || !state?.has_previous_directory;
     element("next-directory").hidden = Boolean(state?.shuffled);
-    element("next-directory").disabled = busy || editor.active || !state?.has_next_directory;
+    element("next-directory").disabled = busy || queueLoading || editor.active || !state?.has_next_directory;
     editor.render();
     highlightPlaylist();
     updateMediaSession();
@@ -328,34 +417,66 @@
       if (error.name === "NotAllowedError") {
         element("status").textContent = "Нажмите Play для продолжения воспроизведения.";
       } else if (error.name !== "AbortError" && !audio.error) {
+        console.error("Не удалось начать воспроизведение", { track: state?.current, url: audio.currentSrc || audio.src, error });
         element("status").textContent = "Не удалось начать воспроизведение. Нажмите Play ещё раз.";
       }
     }
   }
 
-  /** Выполняет переход или перемешивание и применяет состояние сервера. */
-  async function change(action, autoplay = !audio.paused, scrollPlaylist = true) {
-    if (busy || editor.active) return;
+  /** Выбирает трек локальной очереди без изменения состояния других устройств. */
+  async function selectTrack(id, autoplay = !audio.paused, scrollPlaylist = true) {
+    if (busy || queueLoading || editor.active || !queue.some((item) => item[0] === id)) return;
     busy = true;
     render();
     try {
-      state = await request(action);
-      if (action !== "shuffle") loadCurrent();
-      if (state.ended) {
-        audio.pause();
-        element("status").textContent = "Плейлист закончился.";
-      } else if (action === "shuffle") {
-        element("status").textContent = "Следующие треки перемешаны.";
-      } else if (autoplay && state.current) {
-        void play();
-      }
+      const track = trackCache.get(id) ?? (await fetchTracks([id]))[0];
+      state.current = track;
+      updateNavigation();
+      saveQueue();
+      loadCurrent();
+      element("status").textContent = "";
+      if (autoplay) void play();
       await syncPlaylist(scrollPlaylist);
-    } catch (error) {
-      element("status").textContent = error.message;
-    } finally {
-      busy = false;
+    } catch (error) { element("status").textContent = error.message; }
+    finally { busy = false; render(); }
+  }
+
+  /** Переключает трек или директорию в порядке текущей выдачи. */
+  async function change(action, autoplay = !audio.paused, scrollPlaylist = true) {
+    if (busy || queueLoading || editor.active) return;
+    const index = state.current_index;
+    if (action === "shuffle") {
+      const movable = queue.filter((_, i) => i !== index);
+      for (let i = movable.length - 1; i > 0; i -= 1) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [movable[i], movable[j]] = [movable[j], movable[i]];
+      }
+      if (index >= 0) movable.unshift(queue[index]);
+      queue = movable;
+      shuffled = true;
+      updateNavigation();
+      saveQueue();
+      playlistGeneration += 1;
+      playlistTask = null;
+      playlistOffset = 0;
+      playlistButtons.clear();
+      element("playlist-tracks").replaceChildren();
+      await syncPlaylist(scrollPlaylist);
       render();
+      return;
     }
+    if (index < 0) return;
+    let target = action === "next" ? index + 1 : action === "previous" ? index - 1 : -1;
+    if (action === "next-directory") target = queue.findIndex((item, i) => i > index && item[1] !== queue[index][1]);
+    if (action === "previous-directory") {
+      let previous = index - 1;
+      while (previous >= 0 && queue[previous][1] === queue[index][1]) previous -= 1;
+      if (previous >= 0) {
+        while (previous > 0 && queue[previous - 1][1] === queue[previous][1]) previous -= 1;
+        target = previous;
+      }
+    }
+    if (target >= 0 && target < queue.length) await selectTrack(queue[target][0], autoplay, scrollPlaylist);
   }
 
   /** Показывает загруженный в браузере файл в Finder на компьютере сервера. */
@@ -378,6 +499,173 @@
     }
   }
 
+  /** Показывает применённые условия и позволяет удалить каждое отдельно. */
+  function renderFilterChips() {
+    const open = !element("playlist-filters").hidden;
+    element("filter-query").hidden = !open;
+    const containers = [element("filter-chips-open"), element("filter-chips-closed")];
+    for (const container of containers) {
+      container.replaceChildren();
+      container.hidden = container === containers[0] ? !open : open;
+      const addChip = (label, remove) => {
+        const chip = document.createElement("button");
+        chip.type = "button";
+        chip.className = "filter-chip";
+        chip.setAttribute("aria-label", `Убрать фильтр: ${label}`);
+        const text = document.createElement("span");
+        text.className = "filter-chip-label";
+        text.textContent = label;
+        const cross = document.createElement("span");
+        cross.className = "filter-chip-remove";
+        cross.setAttribute("aria-hidden", "true");
+        cross.textContent = "×";
+        chip.append(text, cross);
+        chip.addEventListener("click", remove);
+        container.append(chip);
+      };
+      if (filters.query.trim()) {
+        addChip(`Поиск: ${filters.query.trim()}`, () => {
+          element("filter-query").value = "";
+          applyFilters({ ...filters, query: "" });
+        });
+      }
+      for (const definition of filterDefinitions) {
+        for (const value of filters.tags[definition.key] ?? []) {
+          const label = value === null ? "Не указано" : (definition.values[value] ?? value);
+          const display = definition.type === "star_rating" && value !== null ? `${label}/10` : label;
+          addChip(`${definition.name}: ${display}`, () => {
+            const tags = { ...filters.tags };
+            tags[definition.key] = tags[definition.key].filter((item) => item !== value);
+            if (!tags[definition.key].length) delete tags[definition.key];
+            for (const input of element("filter-fields").querySelectorAll("input[type=checkbox]")) {
+              if (input.filterKey === definition.key && input.filterValue === value) {
+                input.checked = false;
+                input.updateRating?.();
+              }
+            }
+            applyFilters({ ...filters, tags });
+          });
+        }
+      }
+    }
+    element("filters-panel").classList.toggle("is-active", open || containers[1].children.length > 0);
+  }
+
+  /** Загружает доступные подписи тегов для формы и применённых условий. */
+  async function loadFilterDefinitions() {
+    const response = await fetch("/api/playlist/filters", { cache: "no-store" });
+    if (!response.ok) throw new Error("Не удалось загрузить фильтры.");
+    filterDefinitions = await response.json();
+    renderFilterChips();
+    return filterDefinitions;
+  }
+
+  /** Загружает варианты тегов и восстанавливает текущий черновик формы. */
+  async function showFilterFields() {
+    const definitions = await loadFilterDefinitions();
+    const fields = element("filter-fields");
+    fields.replaceChildren();
+    element("filter-query").value = filters.query;
+    for (const definition of definitions) {
+      const group = document.createElement("details");
+      const title = document.createElement("summary");
+      title.textContent = definition.name;
+      group.append(title);
+      const choices = definition.type === "star_rating" ? [] : Object.entries(definition.values);
+      for (const [value, label] of [[null, "Не указано"], ...choices]) {
+        const wrapper = document.createElement("label");
+        wrapper.className = "filter-option";
+        const input = document.createElement("input");
+        input.type = "checkbox";
+        input.filterKey = definition.key;
+        input.filterValue = value;
+        input.checked = (filters.tags[definition.key] ?? []).includes(value);
+        const text = document.createElement("span");
+        text.textContent = label;
+        wrapper.append(input, text);
+        group.append(wrapper);
+      }
+      if (definition.type === "star_rating") {
+        const container = document.createElement("div");
+        container.className = "editor-rating filter-rating";
+        container.setAttribute("role", "group");
+        container.setAttribute("aria-label", definition.name);
+        const input = document.createElement("input");
+        input.type = "checkbox";
+        input.hidden = true;
+        input.filterKey = definition.key;
+        input.filterValue = (filters.tags[definition.key] ?? []).find((value) => value !== null) ?? "";
+        input.checked = Boolean(input.filterValue);
+        const buttons = [];
+        const label = document.createElement("span");
+        label.className = "rating-label";
+        /** Обновляет шкалу по выбранной или предварительной оценке. */
+        const update = (preview = null) => {
+          const rating = preview ?? (input.checked ? Number(input.filterValue) : 0);
+          label.textContent = `${rating || "—"}/10`;
+          buttons.forEach((button, index) => {
+            button.textContent = index < rating ? "★" : "☆";
+            button.classList.toggle("is-filled", index < rating);
+            button.setAttribute("aria-pressed", String(input.checked && index + 1 === Number(input.filterValue)));
+          });
+        };
+        input.updateRating = () => update();
+        for (let number = 1; number <= 10; number += 1) {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.setAttribute("aria-label", `Оценка ${number} из 10`);
+          button.addEventListener("click", () => {
+            const same = input.checked && input.filterValue === String(number);
+            input.filterValue = String(number);
+            input.checked = !same;
+            update();
+          });
+          button.addEventListener("mouseenter", () => update(number));
+          button.addEventListener("focus", () => update(number));
+          button.addEventListener("blur", () => update());
+          buttons.push(button);
+          container.append(button);
+        }
+        container.addEventListener("mouseleave", () => update());
+        container.append(label, input);
+        update();
+        group.append(container);
+      }
+      fields.append(group);
+    }
+  }
+
+  /** Применяет условия и начинает загрузку плейлиста заново. */
+  function applyFilters(next, scrollCurrent = false) {
+    filters = next;
+    renderFilterChips();
+    try { localStorage.setItem(filterStorageKey, JSON.stringify(filters)); } catch { /* Хранилище необязательно. */ }
+    void rebuildQueue({ scrollCurrent });
+  }
+
+  element("toggle-filters").addEventListener("click", () => {
+    const panel = element("playlist-filters");
+    panel.hidden = !panel.hidden;
+    element("toggle-filters").setAttribute("aria-expanded", String(!panel.hidden));
+    renderFilterChips();
+    if (!panel.hidden) void showFilterFields().catch((error) => { element("filter-status").textContent = error.message; });
+  });
+  element("playlist-filters").addEventListener("submit", (event) => {
+    event.preventDefault();
+    const tags = {};
+    for (const input of element("filter-fields").querySelectorAll("input[type=checkbox]:checked")) {
+      (tags[input.filterKey] ??= []).push(input.filterValue);
+    }
+    applyFilters({ query: element("filter-query").value, tags });
+    element("playlist-filters").hidden = true;
+    element("toggle-filters").setAttribute("aria-expanded", "false");
+    renderFilterChips();
+  });
+  element("reset-filters").addEventListener("click", () => {
+    applyFilters({ query: "", tags: {} });
+    void showFilterFields().catch((error) => { element("filter-status").textContent = error.message; });
+  });
+
   element("open-file").addEventListener("click", () => void openFile());
   element("edit-metadata").addEventListener("click", () => {
     if (!busy && state?.current) void editor.open(state.current);
@@ -392,6 +680,14 @@
   element("previous-directory").addEventListener("click", () => void change("previous-directory"));
   element("next-directory").addEventListener("click", () => void change("next-directory"));
   element("shuffle").addEventListener("click", () => void change("shuffle"));
+  element("reset-playlist").addEventListener("click", () => {
+    if (busy || editor.active) return;
+    element("filter-query").value = "";
+    applyFilters({ query: "", tags: {} }, true);
+    if (!element("playlist-filters").hidden) {
+      void showFilterFields().catch((error) => { element("filter-status").textContent = error.message; });
+    }
+  });
   const playlist = element("playlist");
   const mobileLayout = window.matchMedia("(max-width: 767px)");
 
@@ -417,10 +713,14 @@
     if (isOpen && playlistInitialScrollPending && scrollToCurrent()) playlistInitialScrollPending = false;
   });
   playlist.addEventListener("scroll", () => {
+    element("playlist-to-top").hidden = playlist.scrollTop < 200;
     if ((!mobileLayout.matches || playlist.classList.contains("is-open"))
       && playlist.scrollHeight - playlist.scrollTop - playlist.clientHeight < 160) {
       void loadMoreTracks();
     }
+  });
+  element("playlist-to-top").addEventListener("click", () => {
+    playlist.scrollTo({ top: 0, behavior: "smooth" });
   });
   element("playlist-more").addEventListener("click", () => void loadMoreTracks());
   mobileLayout.addEventListener("change", syncPlaylistLayout);
@@ -468,26 +768,64 @@
       element("status").textContent = "Трек закончился. Завершите редактирование и нажмите Play или выберите другой трек.";
       return;
     }
-    void change("next", true, false);
+    if (queueLoading) { pendingAutoAdvance = true; return; }
+    if (state?.has_next) void change("next", true, false);
+    else element("status").textContent = "Воспроизведение остановлено.";
   });
   audio.addEventListener("error", () => {
+    audio.pause();
+    console.error("Ошибка аудио", {
+      track: state?.current,
+      url: audio.currentSrc || audio.src,
+      code: audio.error?.code,
+      message: audio.error?.message,
+      networkState: audio.networkState,
+      readyState: audio.readyState,
+    });
     element("status").textContent = `Не удалось воспроизвести «${state?.current?.name}».`;
-    if (state?.has_next) void change("next", true, false);
-    else {
-      audio.pause();
-      element("status").textContent += " Доступных следующих треков нет.";
-    }
   });
   window.addEventListener("pagehide", save);
   document.addEventListener("visibilitychange", save);
 
-  /** Загружает состояние сервера без автоматического запуска звука. */
+  /** Восстанавливает локальную очередь или состояние из ссылки без запуска звука. */
   async function init() {
     try {
-      state = await request();
+      library = await api("");
+      let saved = null;
+      try { saved = JSON.parse(localStorage.getItem(queueStorageKey)); } catch { /* Нет сохранённой очереди. */ }
+      const params = new URLSearchParams(window.location.search);
+      const hasLink = params.has("t") || params.has("q") || params.has("f");
+      let current = library.ids[0] ?? null;
+      if (hasLink) {
+        const rawIndex = params.get("t");
+        if (rawIndex !== null) {
+          const index = /^[0-9]+$/.test(rawIndex) ? Number(rawIndex) : -1;
+          current = Number.isSafeInteger(index) ? library.ids[index] ?? null : null;
+          if (!current) invalidTrackNumber = rawIndex;
+        }
+        try {
+          const tags = JSON.parse(params.get("f") ?? "{}");
+          if (!tags || typeof tags !== "object" || Array.isArray(tags) || !Object.values(tags).every((values) => Array.isArray(values) && values.every((value) => value === null || typeof value === "string"))) throw new Error();
+          filters = { query: params.get("q") ?? "", tags };
+        } catch { filters = { query: "", tags: {} }; }
+      } else if (library.ids.includes(saved?.current)) {
+        current = saved.current;
+        filters = saved.filters;
+      }
+      state = { current: current ? (await fetchTracks([current]))[0] : null, previous: [], upcoming: [],
+        total: library.ids.length, total_directories: library.total_directories, current_index: -1 };
+      const restore = saved?.shuffled && Array.isArray(saved.queue)
+        && saved.queue.every((item) => Array.isArray(item) && library.ids.includes(item[0]))
+        && JSON.stringify(saved.filters) === JSON.stringify(filters) ? saved.queue : null;
+      renderFilterChips();
+      if (Object.values(filters.tags).some((values) => values.length)) {
+        void loadFilterDefinitions().catch((error) => { element("filter-status").textContent = error.message; });
+      }
       render();
       loadCurrent();
-      await syncPlaylist();
+      await rebuildQueue({ restored: restore });
+      if (invalidTrackNumber !== null) element("status").textContent = `Трек с номером «${invalidTrackNumber}» не найден.`;
+      if (scrollToCurrent()) playlistInitialScrollPending = false;
     } catch (error) {
       element("name").textContent = "Не удалось загрузить библиотеку";
       element("directory").textContent = "Обновите страницу для повторной попытки";

@@ -90,7 +90,7 @@ def test_queue_navigation_and_single_state(tmp_path):
         assert back["ended"] is False
 
 
-def test_audio_range_and_missing_files(tmp_path):
+def test_audio_range_and_missing_files(tmp_path, caplog):
     """Поддерживает перемотку и отклоняет неизвестные, удалённые и подменённые файлы."""
     folder = make_song(tmp_path, "Песня", ("bounce/трек.mp3",))
     with TestClient(create_app(tmp_path)) as client:
@@ -106,6 +106,8 @@ def test_audio_range_and_missing_files(tmp_path):
         path = folder / "bounce/трек.mp3"
         path.unlink()
         assert client.get(url).status_code == 404
+        assert str(path) in caplog.text
+        assert "Музыкальный файл не найден" in caplog.text
         path.symlink_to(tmp_path / "INDEX.md")
         assert client.get(url).status_code == 404
 
@@ -353,13 +355,12 @@ def test_metadata_editor_saves_all_types_and_updates_directory(tmp_path: Path) -
             "other_names",
             "album",
             "genre",
-            "specialty",
-            "sounds_like",
             "lyrics",
             "has_vocals",
             "state",
             "mood",
             "speed",
+            "specialty",
             "rating",
         ]
         assert data["definitions"]["genre"]["display_name"] == "Жанр"
@@ -490,3 +491,94 @@ def test_metadata_rejects_unknown_tracks_and_symlinks(tmp_path: Path) -> None:
         assert client.get(url).status_code == 400
         assert client.put(url, json=update).status_code == 422
         assert outside.read_text(encoding="utf-8") == "Сохранить"
+
+
+def test_playlist_filters_search_tags_and_queue(tmp_path):
+    """Ищет по всей очереди и сочетает выбранные значения без изменения воспроизведения."""
+    first = make_song(tmp_path, "А", tuple(f"bounce/{i:03}.mp3" for i in range(105)))
+    second = make_song(tmp_path, "Б", ("bounce/Love.mp3",))
+    index = Index()
+    index.set("mood", ["sad"])
+    index.set("has_vocals", False)
+    index.set("other_names", ["Пример"])
+    (second / "INDEX.md").write_text(index.render(), encoding="utf-8")
+    with TestClient(create_app(tmp_path)) as client:
+        before = client.get("/api/state").json()
+        options = {
+            item["key"]: item["values"] for item in client.get("/api/playlist/filters").json()
+        }
+        assert "other_names" not in options
+        assert "lyrics" not in options
+        assert "original_folder" not in options
+        assert options["has_vocals"]["false"] == "Нет"
+        result = client.post(
+            "/api/playlist/filter",
+            json={"query": " LOVE ", "tags": {"mood": ["joy", "sad"], "has_vocals": ["false"]}},
+        ).json()
+        assert [track["name"] for track in result["tracks"]] == ["Love.mp3"]
+        missing = client.post(
+            "/api/playlist/filter", json={"tags": {"mood": [None, "sad"]}, "offset": 100}
+        ).json()
+        assert missing["total"] == 106
+        assert len(missing["tracks"]) == 6
+        ignored = client.post(
+            "/api/playlist/filter", json={"tags": {"other_names": ["нет"], "removed": ["нет"]}}
+        ).json()
+        assert ignored["total"] == 106
+        assert client.get("/api/state").json() == before
+        assert first.exists()
+
+
+def test_playlist_text_search_configured_tags(tmp_path: Path) -> None:
+    """Ищет значения включённых тегов независимо от отдельных фильтров."""
+    from index.tags import get_tag_definitions
+
+    folder = make_song(tmp_path, "Песня", ("bounce/Track.mp3",))
+    index = Index()
+    index.set("other_names", ["Особое название", "Запасное"])
+    index.set("mood", ["sad"])
+    index.set("has_vocals", False)
+    (folder / "INDEX.md").write_text(index.render(), encoding="utf-8")
+    definitions = dict(get_tag_definitions())
+    for key in ("other_names", "has_vocals"):
+        definitions[key] = definitions[key].model_copy(update={"use_in_text_search": True})
+    with patch("web_player.filters.get_tag_definitions", return_value=definitions):
+        with TestClient(create_app(tmp_path)) as client:
+            for query in (" TRACK ", "НАЗВАНИЕ", "запас", "нет"):
+                assert (
+                    client.post("/api/playlist/filter", json={"query": query}).json()["total"] == 1
+                )
+            assert client.post("/api/playlist/filter", json={"query": "sad"}).json()["total"] == 0
+            assert (
+                client.post(
+                    "/api/playlist/filter", json={"query": "название", "tags": {"mood": ["joy"]}}
+                ).json()["total"]
+                == 0
+            )
+
+
+def test_library_search_groups_and_batch(tmp_path: Path) -> None:
+    """Ищет целые музыкальные директории и выдаёт сведения в запрошенном порядке."""
+    first = make_song(tmp_path, "Родитель/Лето", ("bounce/Дождь.mp3", "bounce/Солнце.mp3"))
+    make_song(tmp_path, "Осень", ("bounce/Листья.mp3",))
+    index = Index()
+    index.set("mood", ["sad"])
+    (first / "INDEX.md").write_text(index.render(), encoding="utf-8")
+    with TestClient(create_app(tmp_path)) as client:
+        library = client.get("/api/library").json()
+        assert len(library["ids"]) == 3
+        for query in ("ДОЖД", "лето"):
+            result = client.post("/api/library/search", json={"query": query}).json()
+            assert len(result) == 2
+            assert all(item[1] == "Родитель/Лето" for item in result)
+        assert client.post("/api/library/search", json={"query": "Родитель"}).json() == []
+        assert (
+            client.post(
+                "/api/library/search", json={"query": "дождь", "tags": {"mood": ["joy"]}}
+            ).json()
+            == []
+        )
+        ids = [item[0] for item in reversed(result)]
+        batch = client.post("/api/library/tracks", json={"ids": ids}).json()
+        assert [track["id"] for track in batch] == ids
+        assert client.post("/api/library/tracks", json={"ids": ["неизвестен"]}).status_code == 404

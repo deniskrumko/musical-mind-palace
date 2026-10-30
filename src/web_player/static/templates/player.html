@@ -57,10 +57,25 @@
     </section>
     <aside id="playlist" class="playlist" aria-label="Список треков">
       <div class="playlist-content">
+      <div id="filters-panel" class="filters-panel">
+      <div class="playlist-toolbar">
+        <label class="sr-only" for="filter-query">Поиск</label>
+        <input id="filter-query" type="search" form="playlist-filters" placeholder="Поиск" autocomplete="off" hidden>
+        <div id="filter-chips-closed" class="filter-chips" aria-label="Применённые фильтры"></div>
+        <button id="toggle-filters" type="button" aria-label="Фильтры" title="Фильтры" aria-expanded="false" aria-controls="playlist-filters"><span class="control-icon icon-filter" aria-hidden="true"></span></button>
+      </div>
+      <form id="playlist-filters" class="playlist-filters" hidden>
+        <div id="filter-chips-open" class="filter-chips" aria-label="Применённые фильтры"></div>
+        <div id="filter-fields"></div>
+        <div class="filter-actions"><button type="submit">Найти</button><button id="reset-filters" type="button">Сбросить</button></div>
+        <p id="filter-status" role="status"></p>
+      </form>
+      </div>
       <ul id="playlist-tracks" aria-label="Треки"></ul>
       <p id="playlist-status" role="status"></p>
       <button id="playlist-more" hidden>Загрузить ещё</button>
       </div>
+      <button id="playlist-to-top" class="playlist-to-top" type="button" aria-label="Наверх списка" title="Наверх списка" hidden>↑</button>
     </aside>
   </main>
   <footer class="control" aria-label="Управление воспроизведением">
@@ -81,6 +96,7 @@
     <div class="control-right-block">
       <button id="open-file" aria-label="Открыть файл в Finder" title="Показать текущий файл в Finder" disabled><span class="control-icon icon-open-file" aria-hidden="true"></span><span class="control-action-label">Открыть</span></button>
       <button id="shuffle" aria-label="Перемешать треки" disabled><span class="control-icon icon-shuffle" aria-hidden="true"></span><span class="control-action-label">Перемешать</span></button>
+      <button id="reset-playlist" aria-label="Сбросить фильтры и перемешивание" title="Сбросить фильтры и перемешивание"><span class="control-icon icon-reset" aria-hidden="true"></span><span class="control-action-label">Сброс</span></button>
       <button id="toggle-playlist" aria-label="Показать список" aria-expanded="false" aria-pressed="false" aria-controls="playlist"><span class="control-icon icon-playlist" aria-hidden="true"></span><span class="control-action-label">Список</span></button>
     </div>
   </footer>

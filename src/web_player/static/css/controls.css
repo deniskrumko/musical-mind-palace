@@ -120,10 +120,12 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 
 .icon-open-file { --icon: url("../icons/folder-open.svg"); }
 
+.icon-reset { --icon: url("../icons/rotate-ccw.svg"); }
 .icon-shuffle { --icon: url("../icons/shuffle.svg"); }
 
 .icon-playlist { --icon: url("../icons/list-music.svg"); }
 
+.icon-filter { --icon: url("../icons/filter.svg"); }
 .icon-pencil { --icon: url("../icons/pencil.svg"); }
 
 .icon-trash { --icon: url("../icons/trash-2.svg"); }
